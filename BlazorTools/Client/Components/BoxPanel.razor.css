@@ -1,0 +1,7 @@
+﻿/* BoxPanel 卡片样式集中在 wwwroot/css/theme.css（NEBULA-HUD 主题）。
+   本文件仅保留隔离作用域所需的最小补充规则。 */
+
+.box:focus-visible {
+    outline: 2px solid rgba(var(--accent-rgb), .7);
+    outline-offset: 2px;
+}

@@ -1,13 +1,89 @@
-﻿@inherits LayoutComponentBase
+﻿@using System.Threading
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@implements IDisposable
+
+<!-- 背景特效层（网格 / 光晕 / 扫描线 / 暗角） -->
+<div class="fx-layer" aria-hidden="true">
+    <div class="fx-grid"></div>
+    <div class="fx-orb fx-orb-a"></div>
+    <div class="fx-orb fx-orb-b"></div>
+    <div class="fx-scan"></div>
+    <div class="fx-vignette"></div>
+</div>
 
 <div class="page">
-    <div class="sidebar">
+    @* <div class="sidebar">
         <NavMenu />
-    </div>
+    </div> *@
 
-    <main>       
-        <article class="content px-4">
+    <main>
+        <header class="hud-bar">
+            <div class="hud-crumb">
+                <a class="crumb-home" href="@homeHref" title="回到首页 · HOME" aria-label="回到首页">BLAZOR<i>//</i>TOOLS</a>
+                @foreach (var seg in crumbs)
+                {
+                    <span class="sep">/</span>
+                    <span class="@(seg == crumbs[^1] ? "cur" : "")">@seg</span>
+                }
+            </div>
+            <div class="hud-status">
+                <span class="chip chip-live"><i class="dot"></i>ONLINE</span>
+                <span class="chip">.NET 8 · WASM</span>
+                <span class="chip">@clock</span>
+            </div>
+        </header>
+
+        <article class="content">
             @Body
         </article>
+
+        <footer class="hud-foot">
+            <span>© @DateTime.Now.Year BLAZOR//TOOLS</span>
+            <span class="sep">·</span>
+            <span>NO DATA LEAVES YOUR BROWSER</span>
+        </footer>
     </main>
 </div>
+
+@code {
+    private Timer? timer;
+    private string clock = "--:--:--";
+    private string[] crumbs = Array.Empty<string>();
+    private string homeHref = "/";
+
+    protected override void OnInitialized()
+    {
+        // 用 BaseUri 的绝对路径，子路径部署（如 /tools/）时也能正确回首页
+        homeHref = new Uri(Nav.BaseUri).AbsolutePath;
+        Nav.LocationChanged += OnLocationChanged;
+        RefreshRoute();
+        timer = new Timer(_ => Tick(), null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private void Tick()
+    {
+        clock = DateTime.Now.ToString("HH:mm:ss");
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        RefreshRoute();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void RefreshRoute()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.Trim('/');
+        crumbs = path.Length == 0
+            ? new[] { "home" }
+            : path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

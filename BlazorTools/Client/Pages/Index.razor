@@ -1,34 +1,35 @@
 ﻿@page "/"
 @using BlazorTools.Client.Components
-<style>
-    .box-list {
-        display: grid;
-        gap: 13px;
-        grid-template-columns: repeat(auto-fill,minmax(285px,1fr));
-        justify-content: space-evenly
-    }
-</style>
-<PageTitle>BlazorTools</PageTitle>
 
-<h1>Blazor Tools!</h1>
+<PageTitle>BlazorTools · 在线工具箱</PageTitle>
+
+<section class="hero">
+    <div class="hero-tag">// RUNTIME · WEBASSEMBLY · LOCAL COMPUTE</div>
+    <div class="hero-title">BLAZOR<i>//</i>TOOLS</div>
+    <p class="hero-sub">17 个纯前端小工具 · 全部计算在你的浏览器内完成，数据不出本机。</p>
+    <div class="hero-stats">
+        <div class="stat"><b>17</b><span>TOOLS</span></div>
+        <div class="stat"><b>0</b><span>SERVER REQUEST</span></div>
+        <div class="stat"><b>100%</b><span>CLIENT SIDE</span></div>
+    </div>
+</section>
 
 <div class="box-list">
-    <BoxPanel navUrl="floatconversion" Title="浮点转换" />
-    <BoxPanel navUrl="modbusCRC" Title="CRC计算" />
-    <BoxPanel navUrl="rsaTools" Title="RSA加密解密" />
-    <BoxPanel navUrl="urlencoder" Title="Url编码/解码" />
-    <BoxPanel navUrl="base64encoder" Title="Base64Encoder" />
-    <BoxPanel navUrl="qrcode" Title="二维码" />
-    <BoxPanel navUrl="mp4tomp3" Title="MP4 to MP3" />
-    <BoxPanel navUrl="m4atomp3" Title="M4A to MP3" />
-    <BoxPanel navUrl="pictureToBase64" Title="Img转Base64" />
-    <BoxPanel navUrl="imgtoicon" Title="Img转Icon" />
-    <BoxPanel navUrl="ipinfo" Title="IP Info" />
-    <BoxPanel navUrl="dnsleak" Title="DNS泄露" />
-    <BoxPanel navUrl="jsonstrformate" Title="Json格式化" />
-    <BoxPanel navUrl="dateconvert" Title="DateConvert" />
-    <BoxPanel navUrl="colorpicker" Title="ColorPicker" />
-    <BoxPanel navUrl="numbertochinese" Title="数字转大写" />
-    <BoxPanel navUrl="strongpwd" Title="强密码生成" />
+    <BoxPanel navUrl="floatconversion" Title="浮点转换" Desc="IEEE754 浮点与十六进制互转" />
+    <BoxPanel navUrl="modbusCRC" Title="CRC计算" Desc="Modbus CRC16 / CRC32 / 校验和" />
+    <BoxPanel navUrl="rsatools" Title="RSA加密解密" Desc="浏览器本地生成密钥并加解密" />
+    <BoxPanel navUrl="urlencoder" Title="Url编码/解码" Desc="URL Encode / Decode" />
+    <BoxPanel navUrl="base64encoder" Title="Base64编码/解码" Desc="文本与 Base64 互转" />
+    <BoxPanel navUrl="jsonstrformate" Title="Json格式化" Desc="JSON 压缩 / 美化 / 中文转义" />
+    <BoxPanel navUrl="dateconvert" Title="DateConvert" Desc="时间戳与日期时间互转" />
+    <BoxPanel navUrl="numbertochinese" Title="数字转大写" Desc="金额数字转中文大写" />
+    <BoxPanel navUrl="strongpwd" Title="强密码生成" Desc="可配置字符集的随机密码" />
+    <BoxPanel navUrl="qrcode" Title="二维码" Desc="文本 / 链接生成二维码" />
+    <BoxPanel navUrl="mp4tomp3" Title="MP4 to MP3" Desc="本地抽取音轨，不上传文件" />
+    <BoxPanel navUrl="m4atomp3" Title="M4A to MP3" Desc="本地转码，不上传文件" />
+    <BoxPanel navUrl="pictureToBase64" Title="Img转Base64" Desc="图片转 Data URI" />
+    <BoxPanel navUrl="imgtoicon" Title="Img转Icon" Desc="生成 .ico 图标文件" />
+    <BoxPanel navUrl="ipinfo" Title="IP Info" Desc="查询 IP 归属地与 ASN" />
+    <BoxPanel navUrl="dnsleak" Title="DNS泄露" Desc="检测 DNS 请求出口" />
+    <BoxPanel navUrl="colorpicker" Title="ColorPicker" Desc="取色与色值格式转换" />
 </div>
-

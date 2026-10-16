@@ -1,100 +1,42 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">BlazorTools</a>
-        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+﻿<div class="brand">
+    <div class="brand-mark">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 2 28.1 9v14L16 30 3.9 23V9Z" fill="none" stroke="currentColor" stroke-width="1.6" />
+            <path d="M16 9.5 22.5 13v6.5L16 23l-6.5-3.5V13Z" fill="currentColor" opacity=".9" />
+        </svg>
     </div>
+    <div class="brand-text">
+        <span class="brand-name">BLAZOR<i>//</i>TOOLS</span>
+        <span class="brand-sub"><i class="dot"></i>SYSTEM ONLINE</span>
+    </div>
+    <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+        <span class="navbar-toggler-icon"></span>
+    </button>
 </div>
 
 <div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
     <nav class="flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="floatconversion">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> 浮点转换
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="modbusCRC">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> CRC计算
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="rsatools">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> Rsa加密解密
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="urlencoder">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> Url编码/解码
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="base64encoder">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> Base64编码/解码
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="qrcode">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> 二维码
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="mp4tomp3">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> MP4 to MP3
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="m4atomp3">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> M4A to MP3
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="pictureToBase64">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> Img转Base64
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="imgtoicon">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> Img转Icon
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="ipinfo">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> IP Info
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="dnsleak">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> DNS泄露
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="jsonstrformate">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> Json格式化
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="dateconvert">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> DateConvert
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="colorpicker">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> ColorPicker
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="numbertochinese">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> 数字转大写
-            </NavLink>
-        </div>
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="strongpwd">
-                <span class="oi oi-list-rich" aria-hidden="true"></span> 强密码生成
-            </NavLink>
-        </div>
+        @foreach (var group in Groups)
+        {
+            <div class="nav-group">
+                <div class="nav-group-title">@group.Name</div>
+                @foreach (var item in group.Items)
+                {
+                    <div class="nav-item">
+                        <NavLink class="nav-link" href="@item.Href">
+                            <span class="oi @item.Icon" aria-hidden="true"></span>
+                            <span class="nav-label">@item.Text</span>
+                        </NavLink>
+                    </div>
+                }
+            </div>
+        }
     </nav>
+
+    <div class="nav-foot">
+        <div>RUNTIME · WEBASSEMBLY</div>
+        <div class="nav-foot-dim">ALL TOOLS RUN LOCALLY</div>
+    </div>
 </div>
 
 @code {
@@ -106,4 +48,44 @@
     {
         collapseNavMenu = !collapseNavMenu;
     }
+
+    private record NavItem(string Text, string Href, string Icon);
+
+    private record NavGroup(string Name, NavItem[] Items);
+
+    private readonly NavGroup[] Groups = new[]
+    {
+        new NavGroup("转换 · CONVERT", new[]
+        {
+            new NavItem("浮点转换", "floatconversion", "oi-code"),
+            new NavItem("CRC计算", "modbusCRC", "oi-pulse"),
+            new NavItem("Url编码/解码", "urlencoder", "oi-link-intact"),
+            new NavItem("Base64编码/解码", "base64encoder", "oi-terminal"),
+            new NavItem("Json格式化", "jsonstrformate", "oi-file"),
+            new NavItem("DateConvert", "dateconvert", "oi-clock"),
+            new NavItem("数字转大写", "numbertochinese", "oi-text"),
+        }),
+        new NavGroup("安全 · SECURITY", new[]
+        {
+            new NavItem("RSA加密解密", "rsatools", "oi-key"),
+            new NavItem("强密码生成", "strongpwd", "oi-lock-locked"),
+        }),
+        new NavGroup("媒体 · MEDIA", new[]
+        {
+            new NavItem("二维码", "qrcode", "oi-grid-three-up"),
+            new NavItem("MP4 to MP3", "mp4tomp3", "oi-musical-note"),
+            new NavItem("M4A to MP3", "m4atomp3", "oi-headphones"),
+            new NavItem("Img转Base64", "pictureToBase64", "oi-image"),
+            new NavItem("Img转Icon", "imgtoicon", "oi-layers"),
+        }),
+        new NavGroup("网络 · NETWORK", new[]
+        {
+            new NavItem("IP Info", "ipinfo", "oi-globe"),
+            new NavItem("DNS泄露", "dnsleak", "oi-wifi"),
+        }),
+        new NavGroup("设计 · DESIGN", new[]
+        {
+            new NavItem("ColorPicker", "colorpicker", "oi-brush"),
+        }),
+    };
 }
