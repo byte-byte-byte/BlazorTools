@@ -1,35 +1,360 @@
 ﻿@page "/"
 @using BlazorTools.Client.Components
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>BlazorTools · 在线工具箱</PageTitle>
 
 <section class="hero">
     <div class="hero-tag">// RUNTIME · WEBASSEMBLY · LOCAL COMPUTE</div>
     <div class="hero-title">BLAZOR<i>//</i>TOOLS</div>
-    <p class="hero-sub">17 个纯前端小工具 · 全部计算在你的浏览器内完成，数据不出本机。</p>
+    <p class="hero-sub">@Tools.Length 个纯前端小工具 · 全部计算在你的浏览器内完成，数据不出本机。</p>
+
+    <!-- 模糊搜索：子串 / 子序列混合匹配，↑↓ 选择、Enter 打开、Esc 清空 -->
+    <div class="hero-search">
+        <span class="hero-search-ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="10.5" cy="10.5" r="6.5" />
+                <path d="M15.4 15.4 21 21" />
+            </svg>
+        </span>
+        <input @ref="searchBox"
+               class="hero-search-input"
+               type="text"
+               value="@query"
+               @oninput="OnQueryInput"
+               @onkeydown="OnQueryKeyDown"
+               placeholder="搜索工具…  试试 crc / 二维码 / base64 / 取色"
+               autocomplete="off"
+               spellcheck="false"
+               aria-label="搜索工具" />
+        @if (query.Length > 0)
+        {
+            <button type="button" class="hero-search-clear" @onclick="ClearQuery" title="清空 (Esc)" aria-label="清空搜索">✕</button>
+        }
+        <kbd>/</kbd>
+    </div>
+
+    <div class="hero-search-meta">
+        @if (query.Length > 0)
+        {
+            <span>匹配 <b>@hits.Count</b> / @Tools.Length</span>
+            @if (hits.Count > 0)
+            {
+                <span class="dot-sep">·</span>
+                <span>↑↓ 选择 · Enter 打开 · Esc 清空</span>
+            }
+        }
+        else
+        {
+            <span>共 <b>@Tools.Length</b> 个工具 · 输入关键词或按 <b>/</b> 聚焦搜索</span>
+        }
+    </div>
+
     <div class="hero-stats">
-        <div class="stat"><b>17</b><span>TOOLS</span></div>
+        <div class="stat"><b>@Tools.Length</b><span>TOOLS</span></div>
         <div class="stat"><b>0</b><span>SERVER REQUEST</span></div>
         <div class="stat"><b>100%</b><span>CLIENT SIDE</span></div>
     </div>
 </section>
 
-<div class="box-list">
-    <BoxPanel navUrl="floatconversion" Title="浮点转换" Desc="IEEE754 浮点与十六进制互转" />
-    <BoxPanel navUrl="modbusCRC" Title="CRC计算" Desc="Modbus CRC16 / CRC32 / 校验和" />
-    <BoxPanel navUrl="rsatools" Title="RSA加密解密" Desc="浏览器本地生成密钥并加解密" />
-    <BoxPanel navUrl="urlencoder" Title="Url编码/解码" Desc="URL Encode / Decode" />
-    <BoxPanel navUrl="base64encoder" Title="Base64编码/解码" Desc="文本与 Base64 互转" />
-    <BoxPanel navUrl="jsonstrformate" Title="Json格式化" Desc="JSON 压缩 / 美化 / 中文转义" />
-    <BoxPanel navUrl="dateconvert" Title="DateConvert" Desc="时间戳与日期时间互转" />
-    <BoxPanel navUrl="numbertochinese" Title="数字转大写" Desc="金额数字转中文大写" />
-    <BoxPanel navUrl="strongpwd" Title="强密码生成" Desc="可配置字符集的随机密码" />
-    <BoxPanel navUrl="qrcode" Title="二维码" Desc="文本 / 链接生成二维码" />
-    <BoxPanel navUrl="mp4tomp3" Title="MP4 to MP3" Desc="本地抽取音轨，不上传文件" />
-    <BoxPanel navUrl="m4atomp3" Title="M4A to MP3" Desc="本地转码，不上传文件" />
-    <BoxPanel navUrl="pictureToBase64" Title="Img转Base64" Desc="图片转 Data URI" />
-    <BoxPanel navUrl="imgtoicon" Title="Img转Icon" Desc="生成 .ico 图标文件" />
-    <BoxPanel navUrl="ipinfo" Title="IP Info" Desc="查询 IP 归属地与 ASN" />
-    <BoxPanel navUrl="dnsleak" Title="DNS泄露" Desc="检测 DNS 请求出口" />
-    <BoxPanel navUrl="colorpicker" Title="ColorPicker" Desc="取色与色值格式转换" />
-</div>
+@if (hits.Count == 0)
+{
+    <div class="box-empty">
+        <div class="box-empty-ico">⌕</div>
+        <div class="box-empty-title">没有匹配 “<span>@query</span>” 的工具</div>
+        <div class="box-empty-hint">
+            支持模糊匹配，例如 <code>crc</code>、<code>b64</code>、<code>二维码</code>、<code>szdx</code>
+        </div>
+        <button type="button" class="btn" @onclick="ClearQuery">清空搜索</button>
+    </div>
+}
+else
+{
+    <div class="box-list">
+        @for (int i = 0; i < hits.Count; i++)
+        {
+            var hit = hits[i];
+            <BoxPanel @key="hit.Tool.Url"
+                      navUrl="@hit.Tool.Url"
+                      Title="@hit.Tool.Title"
+                      Desc="@hit.Tool.Desc"
+                      Mark="hit.Mark"
+                      Selected="@(i == selIndex)" />
+        }
+    </div>
+}
+
+@code {
+    private ElementReference searchBox;
+    private string query = "";
+    private List<Hit> hits = new();
+    private int selIndex = -1;
+
+    // Alias：拼音首字母 + 英文同义词，解决中文标题不方便输入的问题
+    private static readonly Tool[] Tools =
+    {
+        new("floatconversion",   "浮点转换",        "IEEE754 浮点与十六进制互转",    "fudian fdzh float ieee754 hex double jingdu"),
+        new("modbusCRC",         "CRC计算",         "Modbus CRC16 / CRC32 / 校验和", "crc crc16 crc32 modbus xiaoyan jyh jiaoyanhe checksum"),
+        new("rsatools",          "RSA加密解密",     "浏览器本地生成密钥并加解密",    "rsa rsajmjm jiami jiemi miyao key encrypt decrypt"),
+        new("urlencoder",        "Url编码/解码",    "URL Encode / Decode",           "url urlbmjm encode decode bianma jiema escape"),
+        new("base64encoder",     "Base64编码/解码", "文本与 Base64 互转",            "base64 b64 bmjm bianma jiema encode decode"),
+        new("jsonstrformate",    "Json格式化",      "JSON 压缩 / 美化 / 中文转义",   "json jsongsh gsh format yasuo minify pretty zhongwen zhuanyi"),
+        new("dateconvert",       "DateConvert",     "时间戳与日期时间互转",          "date time shijianchuo sjc timestamp unix zhuanhuan"),
+        new("numbertochinese",   "数字转大写",      "金额数字转中文大写",            "shuzi szdx daxie jine rmb renminbi amount"),
+        new("strongpwd",         "强密码生成",      "可配置字符集的随机密码",        "password pwd mima qmmsc random generate"),
+        new("qrcode",            "二维码",          "文本 / 链接生成二维码",         "qrcode qr ewm erweima saomiao matrix code"),
+        new("mp4tomp3",          "MP4 to MP3",      "本地抽取音轨，不上传文件",      "mp4 mp3 audio yinpin ffmpeg extract zhuanhuan"),
+        new("m4atomp3",          "M4A to MP3",      "本地转码，不上传文件",          "m4a mp3 audio yinpin ffmpeg zhuanma convert"),
+        new("pictureToBase64",   "Img转Base64",     "图片转 Data URI",               "img image picture tupian tp base64 datauri"),
+        new("imgtoicon",         "Img转Icon",       "生成 .ico 图标文件",            "img icon ico tupian tubiao favicon"),
+        new("ipinfo",            "IP Info",         "查询 IP 归属地与 ASN",          "ip guishudi asn diqu address geo wangluo"),
+        new("dnsleak",           "DNS泄露",         "检测 DNS 请求出口",             "dns leak xielou xl ceshi privacy yinsi"),
+        new("colorpicker",       "ColorPicker",     "取色与色值格式转换",            "color picker quese qse sezhi hex rgb hsl yanse"),
+    };
+
+    private sealed record Tool(string Url, string Title, string Desc, string Alias);
+
+    private sealed record Hit(Tool Tool, int Score, bool[]? Mark);
+
+    protected override void OnInitialized()
+    {
+        hits = Search("");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                // 注册全局快捷键：/ 或 Ctrl/Cmd+K 聚焦搜索框
+                await JS.InvokeVoidAsync("btSearchHotkey", searchBox);
+            }
+            catch
+            {
+                // JS 不可用（如预渲染）时静默降级，不影响搜索本身
+            }
+        }
+    }
+
+    private void OnQueryInput(ChangeEventArgs e)
+    {
+        query = e.Value?.ToString() ?? "";
+        hits = Search(query);
+        selIndex = hits.Count > 0 ? 0 : -1;
+    }
+
+    private void OnQueryKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                if (hits.Count > 0)
+                {
+                    selIndex = (selIndex + 1) % hits.Count;
+                }
+                break;
+
+            case "ArrowUp":
+                if (hits.Count > 0)
+                {
+                    selIndex = (selIndex - 1 + hits.Count) % hits.Count;
+                }
+                break;
+
+            case "Enter":
+                if (selIndex >= 0 && selIndex < hits.Count)
+                {
+                    Nav.NavigateTo(hits[selIndex].Tool.Url);
+                }
+                break;
+
+            case "Escape":
+                ClearQuery();
+                break;
+        }
+    }
+
+    private void ClearQuery()
+    {
+        query = "";
+        hits = Search("");
+        selIndex = -1;
+    }
+
+    /// <summary>模糊搜索：按空格拆词，每个词都必须命中（AND），得分求和后排序。</summary>
+    private static List<Hit> Search(string raw)
+    {
+        var tokens = (raw ?? "").Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (tokens.Length == 0)
+        {
+            return Tools.Select(t => new Hit(t, 0, null)).ToList();
+        }
+
+        var result = new List<Hit>();
+
+        foreach (var tool in Tools)
+        {
+            int total = 0;
+            bool ok = true;
+            bool[]? mark = null;
+
+            foreach (var token in tokens)
+            {
+                int best = 0;
+                bool[]? bestMark = null;
+
+                // 标题、路由允许跳字的子序列匹配；别名、描述只做子串匹配，
+                // 否则跨关键词/跨句子的子序列会误命中（如 crc → colorPicker）
+                Consider(tool.Title, token, 3.0, true, true, ref best, ref bestMark);
+                Consider(tool.Url, token, 2.5, false, true, ref best, ref bestMark);
+                Consider(tool.Alias, token, 2.0, false, false, ref best, ref bestMark);
+                Consider(tool.Desc, token, 1.0, false, false, ref best, ref bestMark);
+
+                if (best <= 0)
+                {
+                    ok = false;
+                    break;
+                }
+
+                total += best;
+
+                if (bestMark is not null)
+                {
+                    mark = Merge(mark, bestMark);
+                }
+            }
+
+            if (ok)
+            {
+                result.Add(new Hit(tool, total, mark));
+            }
+        }
+
+        // 得分相同时保持工具原始顺序
+        return result
+            .OrderByDescending(h => h.Score)
+            .ThenBy(h => Array.IndexOf(Tools, h.Tool))
+            .ToList();
+    }
+
+    private static void Consider(string field, string token, double weight, bool canMark, bool allowSubseq,
+                                 ref int best, ref bool[]? bestMark)
+    {
+        var (score, mask) = Fuzzy(field, token, allowSubseq);
+        if (score <= 0)
+        {
+            return;
+        }
+
+        int weighted = (int)(score * weight);
+        if (weighted > best)
+        {
+            best = weighted;
+            // 只有标题命中才做高亮，否则高亮位置对不上
+            bestMark = canMark ? mask : null;
+        }
+    }
+
+    /// <summary>
+    /// 先试精确子串（高分）；allowSubseq 为 true 时才退化为子序列匹配（低分）。
+    /// 返回逐字符命中掩码，供标题高亮使用。
+    /// </summary>
+    private static (int Score, bool[] Mask) Fuzzy(string hay, string needle, bool allowSubseq)
+    {
+        var mask = new bool[hay.Length];
+        if (string.IsNullOrEmpty(hay) || string.IsNullOrEmpty(needle))
+        {
+            return (0, mask);
+        }
+
+        var h = hay.ToLowerInvariant();
+        var n = needle.ToLowerInvariant();
+
+        // 1) 精确子串
+        int idx = h.IndexOf(n, StringComparison.Ordinal);
+        if (idx >= 0)
+        {
+            for (int i = 0; i < n.Length && idx + i < mask.Length; i++)
+            {
+                mask[idx + i] = true;
+            }
+
+            int score = 120 - Math.Min(idx, 60);
+            if (idx == 0 || !char.IsLetterOrDigit(h[idx - 1]))
+            {
+                score += 40; // 命中词首
+            }
+
+            if (idx + n.Length == h.Length)
+            {
+                score += 10; // 命中词尾
+            }
+
+            return (score, mask);
+        }
+
+        if (!allowSubseq)
+        {
+            return (0, mask);
+        }
+
+        // 2) 子序列（允许跳字）
+        int total = 0;
+        int from = 0;
+        int last = -1;
+
+        foreach (char c in n)
+        {
+            int p = h.IndexOf(c, from);
+            if (p < 0)
+            {
+                return (0, new bool[hay.Length]);
+            }
+
+            total += 10;
+            if (last >= 0 && p == last + 1)
+            {
+                total += 18; // 连续命中
+            }
+
+            if (p == 0 || !char.IsLetterOrDigit(h[p - 1]))
+            {
+                total += 14; // 落在词首
+            }
+
+            total -= Math.Min(p - from, 8); // 跳字惩罚
+
+            mask[p] = true;
+            from = p + 1;
+            last = p;
+        }
+
+        return (Math.Max(total, 1), mask);
+    }
+
+    private static bool[] Merge(bool[]? a, bool[]? b)
+    {
+        if (a is null)
+        {
+            return b ?? Array.Empty<bool>();
+        }
+
+        if (b is null)
+        {
+            return a;
+        }
+
+        var len = Math.Max(a.Length, b.Length);
+        var result = new bool[len];
+        for (int i = 0; i < len; i++)
+        {
+            result[i] = (i < a.Length && a[i]) || (i < b.Length && b[i]);
+        }
+
+        return result;
+    }
+}

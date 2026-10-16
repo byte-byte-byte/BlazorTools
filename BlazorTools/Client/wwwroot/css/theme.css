@@ -645,6 +645,165 @@ h1, h2, h3, h4 { font-family: var(--font-mono); color: #eaf4ff; letter-spacing: 
 
 .hero-sub { margin: 0; color: var(--txt-2); font-size: .92rem; }
 
+/* ---- 首页模糊搜索 ---- */
+.hero-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    max-width: 560px;
+    margin-top: 1.15rem;
+    padding: .5rem .75rem;
+    border: 1px solid var(--line-2);
+    border-radius: 99px;
+    background: rgba(4, 7, 14, .55);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+    transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+    .hero-search:focus-within {
+        border-color: rgba(var(--accent-rgb), .7);
+        background: rgba(6, 11, 21, .82);
+        box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .12), 0 0 26px rgba(var(--accent-rgb), .22);
+    }
+
+.hero-search-ico {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+}
+
+    .hero-search-ico svg { width: 17px; height: 17px; }
+
+/* 覆盖主题里 input[type=text] 的默认边框/底色 */
+.hero-search .hero-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    padding: .1rem 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: .92rem;
+    letter-spacing: .02em;
+}
+
+    .hero-search .hero-search-input::placeholder { color: var(--txt-3); }
+
+    .hero-search .hero-search-input:focus {
+        border: 0;
+        background: transparent;
+        box-shadow: none;
+        outline: none;
+    }
+
+.hero-search-clear {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .04);
+    color: var(--txt-2);
+    font-size: .68rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .16s ease, border-color .16s ease, background .16s ease;
+}
+
+    .hero-search-clear:hover {
+        color: #fff;
+        border-color: rgba(var(--accent-rgb), .6);
+        background: rgba(var(--accent-rgb), .14);
+    }
+
+.hero-search kbd {
+    flex: 0 0 auto;
+    padding: .12rem .42rem;
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, .04);
+    font: 600 10px/1.5 var(--font-mono);
+    letter-spacing: .08em;
+    color: var(--txt-3);
+}
+
+.hero-search-meta {
+    margin-top: .6rem;
+    font: 600 10px/1.6 var(--font-mono);
+    letter-spacing: .14em;
+    color: var(--txt-3);
+    text-transform: uppercase;
+}
+
+    .hero-search-meta b { color: var(--accent); font-weight: 700; }
+    .hero-search-meta .dot-sep { margin: 0 .45rem; opacity: .6; }
+
+/* 搜索命中的字符 */
+mark, .box h3 mark {
+    padding: 0 1px;
+    border-radius: 3px;
+    background: rgba(var(--accent-rgb), .26);
+    color: #fff;
+    box-shadow: 0 0 10px rgba(var(--accent-rgb), .25);
+}
+
+/* 键盘选中的卡片 */
+.box.is-sel {
+    border-color: rgba(var(--accent-rgb), .8);
+    box-shadow: var(--shadow-2), 0 0 28px rgba(var(--accent-rgb), .3);
+    transform: translateY(-4px);
+}
+
+    .box.is-sel::before { opacity: 1; }
+    .box.is-sel .box-corner { opacity: 1; }
+
+/* 空结果 */
+.box-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .75rem;
+    padding: 2.4rem 1.5rem;
+    border: 1px dashed var(--line-2);
+    border-radius: var(--r);
+    background: rgba(8, 13, 24, .5);
+    text-align: center;
+}
+
+.box-empty-ico {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--line-2);
+    border-radius: 50%;
+    color: var(--accent);
+    font-size: 1.3rem;
+}
+
+.box-empty-title { color: var(--txt); font-size: .95rem; }
+.box-empty-title span { color: var(--accent); font-family: var(--font-mono); }
+.box-empty-hint { color: var(--txt-3); font-size: .84rem; }
+.box-empty-hint code {
+    padding: .05rem .35rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, .04);
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    color: var(--txt-2);
+}
+
 .hero-stats { display: flex; gap: 1.8rem; flex-wrap: wrap; margin-top: 1.15rem; }
 
 .stat { display: flex; flex-direction: column; }

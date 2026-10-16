@@ -1,4 +1,4 @@
-﻿<a class="box" href="@navUrl" title="@Title">
+﻿<a class="box @(Selected ? "is-sel" : "")" href="@navUrl" title="@Title">
     <span class="box-corner tl"></span>
     <span class="box-corner br"></span>
     <div class="box-main">
@@ -11,7 +11,7 @@
                     <path d="M8.5 15.5 15.5 8.5" />
                 </svg>
             </span>
-            <h3>@Title</h3>
+            <h3>@MarkedTitle</h3>
         </div>
         <p class="box-desc">@(string.IsNullOrWhiteSpace(Desc) ? "点击进入工具" : Desc)</p>
         <div class="box-foot">
@@ -30,4 +30,49 @@
 
     [Parameter]
     public string Title { get; set; } = "tool";
+
+    /// <summary>搜索命中位置掩码（长度与 Title 对齐），为 true 的字符会被 &lt;mark&gt; 包裹。</summary>
+    [Parameter]
+    public bool[]? Mark { get; set; }
+
+    /// <summary>键盘上下键选中的卡片。</summary>
+    [Parameter]
+    public bool Selected { get; set; }
+
+    /// <summary>
+    /// 把标题按掩码切成「普通文本 / 高亮片段」交替的块，
+    /// 避免逐字符渲染产生一堆相邻的 mark 元素。
+    /// </summary>
+    private RenderFragment MarkedTitle => builder =>
+    {
+        var text = Title ?? "";
+        var mask = Mark;
+        int seq = 0;
+        int i = 0;
+
+        while (i < text.Length)
+        {
+            bool on = mask is not null && i < mask.Length && mask[i];
+
+            int j = i;
+            while (j < text.Length && ((mask is not null && j < mask.Length && mask[j]) == on))
+            {
+                j++;
+            }
+
+            var chunk = text.Substring(i, j - i);
+            if (on)
+            {
+                builder.OpenElement(seq++, "mark");
+                builder.AddContent(seq++, chunk);
+                builder.CloseElement();
+            }
+            else
+            {
+                builder.AddContent(seq++, chunk);
+            }
+
+            i = j;
+        }
+    };
 }
