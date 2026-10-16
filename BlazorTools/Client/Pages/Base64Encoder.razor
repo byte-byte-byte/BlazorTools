@@ -1,0 +1,30 @@
+﻿@page "/base64encoder"
+<h3>Base64编码/解码</h3>
+<div>
+    <label>编码:</label><br />
+    <textarea style="width:100%;" @bind="@tEncodeStr"></textarea>
+</div>
+<div>
+    <label>解码:</label><br />
+    <textarea style="width:100%;" @bind="@tDecodeStr"></textarea>
+</div>
+<div>
+    <button class="btn btn-light" onclick="@btnEClick">编码</button>
+    <button class="btn btn-light" onclick="@btnDClick">解码</button>
+</div>
+@code {
+    string tEncodeStr { get; set; }
+    string tDecodeStr { get; set; }
+    async Task btnEClick(EventArgs e)
+    {
+        byte[] bytes = System.Text.Encoding.Default.GetBytes(tEncodeStr);
+        tDecodeStr = Convert.ToBase64String(bytes);
+        StateHasChanged();
+    }
+    async Task btnDClick(EventArgs e)
+    {
+        byte[] bytes = Convert.FromBase64String(tDecodeStr);
+        tEncodeStr = System.Text.Encoding.Default.GetString(bytes);
+        StateHasChanged();
+    }
+}

@@ -1,0 +1,105 @@
+﻿@page "/mp4tomp3"
+@inject IJSRuntime JS
+@using FFmpegBlazor
+
+<h3>Mp4 to Mp3</h3>
+<InputFile OnChange="fileLoad" />
+<br />
+<br />
+<video width="300" height="200" autoplay controls src="@url" />
+<br />
+<br />
+<button class="btn btn-primary" @onclick="Process">Convert Mp3</button>
+<br />
+<br />
+<p>@presentStr</p>
+<audio controls src="@url2" />
+<p><a href="https://github.com/sps014/FFmpegBlazor">powered by FFmpegBlazor</a></p>
+@code {
+    string url; string url2;
+    FFMPEG ff;
+    byte[] buffer;
+    string presentStr;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (FFmpegFactory.Runtime == null)
+        {
+            FFmpegFactory.Logger += WriteLogs;
+            FFmpegFactory.Progress += ProgressChange;
+        }
+
+        //initialize Library
+        await FFmpegFactory.Init(JS);
+    }
+
+    async void fileLoad(InputFileChangeEventArgs v)
+    {
+        //get fist file from input selection
+        var file = v.GetMultipleFiles()[0];
+
+        //read all bytes
+        using var stream = file.OpenReadStream(200000000); //Max size for file that can be read
+        buffer = new byte[file.Size];
+
+        //read all bytes
+        await stream.ReadAsync(buffer);
+
+        //create a video link from buffer so that video can be played
+        url = FFmpegFactory.CreateURLFromBuffer(buffer, "myFile.mp4", file.ContentType);
+
+        //reRender DOM
+        StateHasChanged();
+    }
+
+    async void Process()
+    {
+        //create an instance
+        ff = FFmpegFactory.CreateFFmpeg(new FFmpegConfig() { Log = true });
+
+        //download all dependencies from cdn
+        await ff.Load();
+
+        if (!ff.IsLoaded) return;
+
+        //write buffer to in-memory files (special emscripten files, Ffmpeg only interact with this file)
+        ff.WriteFile("myFile.mp4", buffer);
+
+        //Pass CLI argument here equivalent to ffmpeg -i myFile.mp4 output.mp3
+        await ff.Run("-i", "myFile.mp4", "output.mp3");
+
+        //delete in-memory file
+        //ff.UnlinkFile("myFile.mp4");
+    }
+
+    async void ProgressChange(Progress m)
+    {
+        // display progress % (0-1)
+        Console.WriteLine($"Progress {m.Ratio}");
+
+        presentStr = (m.Ratio * 100).ToString("F0") + "%";
+        StateHasChanged();
+            
+        //if ffmpeg processing is complete (generate a media URL so that it can be played or alternatively download that file)
+        if (m.Ratio == 1)
+        {
+            //get bytepointer from c wasm to c#
+            var res = await ff.ReadFile("output.mp3");
+
+
+            //generate a url from file bufferPointer
+            url2 = FFmpegFactory.CreateURLFromBuffer(res, "output.mp3", "audio/mp3");
+
+            //Download the file instantly
+
+            //FFmpegFactory.DownloadBufferAsFile(res, "output.mp3", "audio/mp3");
+
+            StateHasChanged();
+        }
+    }
+
+    void WriteLogs(Logs m)
+    {
+        Console.WriteLine(m.Type + " " + m.Message);
+    }
+}

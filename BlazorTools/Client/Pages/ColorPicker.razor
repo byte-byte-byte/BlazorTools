@@ -1,0 +1,207 @@
+﻿@page "/colorpicker"
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@colorPickerCss
+<h1>ColorPicker</h1>
+<input id="ipColorPick" type="text" value="#3606f5" data-coloris>
+
+<br />
+<br />
+<h2 >常用的HTML颜色代码列表</h2>
+<table class="color-table">
+    <thead class="color-table-head">
+        <tr class="color-table-row">
+            <th class="color-table-cell color-table-cell-color">Color</th>
+            <th class="color-table-cell color-table-cell-name">Name</th>
+            <th class="color-table-cell color-table-cell-hex">Hex Code</th>
+            <th class="color-table-cell color-table-cell-rgb">RGB Code</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #FFFFFF;" data-hex="#FFFFFF" data-rgb="rgb(255, 255, 255)" data-hsl="hsl(0, 0%, 100%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">White</td>
+            <td class="color-table-cell color-table-cell-hex">#FFFFFF</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(255, 255, 255)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #C0C0C0;" data-hex="#C0C0C0" data-rgb="rgb(192, 192, 192)" data-hsl="hsl(0, 0%, 75%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Silver</td>
+            <td class="color-table-cell color-table-cell-hex">#C0C0C0</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(192, 192, 192)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #808080;" data-hex="#808080" data-rgb="rgb(128, 128, 128)" data-hsl="hsl(0, 0%, 50%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Gray</td>
+            <td class="color-table-cell color-table-cell-hex">#808080</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(128, 128, 128)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #000000;" data-hex="#000000" data-rgb="rgb(0, 0, 0)" data-hsl="hsl(0, 0%, 0%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Black</td>
+            <td class="color-table-cell color-table-cell-hex">#000000</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(0, 0, 0)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #FF0000;" data-hex="#FF0000" data-rgb="rgb(255, 0, 0)" data-hsl="hsl(0, 100%, 50%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Red</td>
+            <td class="color-table-cell color-table-cell-hex">#FF0000</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(255, 0, 0)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #800000;" data-hex="#800000" data-rgb="rgb(128, 0, 0)" data-hsl="hsl(0, 100%, 25%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Maroon</td>
+            <td class="color-table-cell color-table-cell-hex">#800000</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(128, 0, 0)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #FFFF00;" data-hex="#FFFF00" data-rgb="rgb(255, 255, 0)" data-hsl="hsl(60, 100%, 50%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Yellow</td>
+            <td class="color-table-cell color-table-cell-hex">#FFFF00</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(255, 255, 0)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #808000;" data-hex="#808000" data-rgb="rgb(128, 128, 0)" data-hsl="hsl(60, 100%, 25%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Olive</td>
+            <td class="color-table-cell color-table-cell-hex">#808000</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(128, 128, 0)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #00FF00;" data-hex="#00FF00" data-rgb="rgb(0, 255, 0)" data-hsl="hsl(120, 100%, 50%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Lime</td>
+            <td class="color-table-cell color-table-cell-hex">#00FF00</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(0, 255, 0)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #008000;" data-hex="#008000" data-rgb="rgb(0, 128, 0)" data-hsl="hsl(120, 100%, 25%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Green</td>
+            <td class="color-table-cell color-table-cell-hex">#008000</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(0, 128, 0)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #00FFFF;" data-hex="#00FFFF" data-rgb="rgb(0, 255, 255)" data-hsl="hsl(180, 100%, 50%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Aqua</td>
+            <td class="color-table-cell color-table-cell-hex">#00FFFF</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(0, 255, 255)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #008080;" data-hex="#008080" data-rgb="rgb(0, 128, 128)" data-hsl="hsl(180, 100%, 25%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Teal</td>
+            <td class="color-table-cell color-table-cell-hex">#008080</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(0, 128, 128)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #0000FF;" data-hex="#0000FF" data-rgb="rgb(0, 0, 255)" data-hsl="hsl(240, 100%, 50%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Blue</td>
+            <td class="color-table-cell color-table-cell-hex">#0000FF</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(0, 0, 255)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #000080;" data-hex="#000080" data-rgb="rgb(0, 0, 128)" data-hsl="hsl(240, 100%, 25%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Navy</td>
+            <td class="color-table-cell color-table-cell-hex">#000080</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(0, 0, 128)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #FF00FF;" data-hex="#FF00FF" data-rgb="rgb(255, 0, 255)" data-hsl="hsl(300, 100%, 50%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Fuchsia</td>
+            <td class="color-table-cell color-table-cell-hex">#FF00FF</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(255, 0, 255)</td>
+        </tr>
+        <tr class="color-table-row">
+            <td class="color-table-cell color-table-cell-color">
+                <div class="color-table-color " style="background-color: #800080;" data-hex="#800080" data-rgb="rgb(128, 0, 128)" data-hsl="hsl(300, 100%, 25%)"></div>
+            </td>
+            <td class="color-table-cell color-table-cell-name">Purple</td>
+            <td class="color-table-cell color-table-cell-hex">#800080</td>
+            <td class="color-table-cell color-table-cell-rgb">rgb(128, 0, 128)</td>
+        </tr>
+    </tbody>
+</table>
+
+<br />
+@code {
+    RenderFragment? colorPickerCss{ get; set; }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+        if (firstRender)
+        {
+            string cssContent;
+            using (var stream = this.GetType().Assembly.GetManifestResourceStream(this.GetType().Assembly.GetName().Name + ".Pages.ColorPicker.razor.css"))
+            {
+                using (var sr = new System.IO.StreamReader(stream))
+                    cssContent = await sr.ReadToEndAsync();
+                colorPickerCss = __builder => {
+                    <style>@cssContent</style>
+                };
+            }
+            string scriptContent;
+            using (var stream = this.GetType().Assembly.GetManifestResourceStream(this.GetType().Assembly.GetName().Name + ".Pages.ColorPicker.razor.js"))
+            {
+                using (var sr = new System.IO.StreamReader(stream))
+                    scriptContent = await sr.ReadToEndAsync();
+            }
+            string jsTxt = @"
+function removeElementById(elementId) {
+    // 获取具有指定 ID 的元素
+    var element = document.getElementById(elementId);
+
+    // 如果元素存在，删除它
+    if (element) {
+        element.remove();
+    }
+}
+// 删除所有具有指定 class 的元素
+function removeElementsByClass(className) {
+    // 获取所有具有指定 class 的元素
+    var elements = document.querySelectorAll('.' + className);
+
+    // 遍历这些元素并删除它们
+    elements.forEach(function(element) {
+        element.remove();
+    });
+}
+";
+            await JS.InvokeVoidAsync("eval", scriptContent);
+            await JS.InvokeVoidAsync("eval", jsTxt);
+            StateHasChanged();
+        }
+    }
+    async ValueTask IAsyncDisposable.DisposeAsync()
+    {
+        await JS.InvokeVoidAsync("removeElementById", "clr-picker");
+        await JS.InvokeVoidAsync("removeElementsByClass", "clr-field");
+    }
+}

@@ -1,0 +1,181 @@
+﻿@page "/ipinfo"
+@using System.Text.Json.Serialization
+@using System.Net
+<h3>IpInfo</h3>
+<br />
+<div class="input-group mb-3">
+    <input @bind-value="@ip_address" type="text" class="form-control" placeholder="ip address">
+    <button type="button" class="btn btn-primary" onclick="@btnClickSearch" disabled="@btnDis">查询</button>
+    &nbsp;&nbsp;
+    <button type="button" class="btn btn-primary" onclick="@btnClick" disabled="@btnDis">查看自己</button>
+</div>
+
+<hr />
+<div class="row">
+    <div class="col-md-6">
+        @rContentv4
+    </div>
+    <div class="col-md-6">
+        @rContentv6
+    </div>
+</div>
+@code {
+    bool btnDis = false;
+    string ip_address{ get; set; }
+    RenderFragment? rContentv4 { get; set; }
+    RenderFragment? rContentv6 { get; set; }
+    async Task btnClickSearch(EventArgs e)
+    {
+        if (!IPAddress.TryParse(ip_address, out _))
+        {
+            rContentv4 =@<p>Error ip address</p>;
+            StateHasChanged();
+            return;
+        }
+
+        try
+        {
+            btnDis = true;
+            rContentv4 =@<p>Running...</p>;
+            rContentv6 =@<p></p>;
+            StateHasChanged();
+            System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
+            var ip4 = await client.GetFromJsonAsync<ip_root>("https://ip4.ljjl.net/?ip=" + ip_address);
+            if (ip4 == null)
+                rContentv4 =@<p>Failed</p>;
+            else
+            {
+                rContentv4 = __builder =>
+                {
+                    <p>IP: @ip4.IP.IP</p>
+                    <p>Continent: @ip4.IP.Continent</p>
+                    <p>Country: @ip4.IP.Country</p>
+                    <p>Region: @ip4.IP.Region</p>
+                    <p>City: @ip4.IP.City</p>
+                };
+            }
+        }
+        catch
+        {
+            rContentv4 =@<p>Failed</p>;
+        }
+
+        btnDis = false;
+        StateHasChanged();
+    }
+    async Task btnClick(EventArgs e)
+    {
+        btnDis = true;
+        rContentv4 =@<p>Running...</p>;
+        rContentv6 = @<p>Running...</p>;
+        StateHasChanged();
+        try
+        {
+            System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
+            var ip4 = await client.GetFromJsonAsync<ip_root>("https://ip4.ljjl.net");
+            var ip6 = await client.GetFromJsonAsync<ip_root>("https://ip6.ljjl.net");
+
+
+            if (ip4 == null)
+                rContentv4 =@<p>Failed</p>;
+            else
+            {
+                rContentv4 = __builder =>
+                {
+                    <p>IP: @ip4.IP.IP</p>
+                    <p>Continent: @ip4.IP.Continent</p>
+                    <p>Country: @ip4.IP.Country</p>
+                    <p>Region: @ip4.IP.Region</p>
+                    <p>UA: @ip4.Headers.user_agent</p>
+                };
+            }
+            if (ip6 == null)
+                rContentv6 = @<p>Failed</p>;
+            else
+            {
+                rContentv6 = __builder =>
+               {
+                   <p>IP: @ip6.IP.IP</p>
+                   <p>Continent: @ip6.IP.Continent</p>
+                   <p>Country: @ip6.IP.Country</p>
+                   <p>Region: @ip6.IP.Region</p>
+                   <p>UA: @ip6.Headers.user_agent</p>
+               };
+            }
+        }catch(Exception ex)
+        {
+            rContentv4 = (Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) =>
+            {
+                <p>@ex.Message</p>
+            }; 
+        }
+        btnDis = false;
+        StateHasChanged();
+    }
+  
+    public class ip_root
+    {
+        public string Method { get; set; }
+        public string Url { get; set; }
+        public ip_ip IP { get; set; }
+        public ip_headers Headers { get; set; }
+        public ip_security Security { get; set; }
+    }
+
+    public class ip_headers
+    {
+
+        public string accept { get; set; }
+        [JsonPropertyName("accept-encoding")]
+        public string accept_encoding { get; set; }
+        [JsonPropertyName("accept-language")]
+        public string accept_language { get; set; }
+        public string connection { get; set; }
+        public string dnt { get; set; }
+        public string host { get; set; }
+        public string priority { get; set; }
+        [JsonPropertyName("sec-fetch-dest")]
+        public string sec_fetch_dest { get; set; }
+        [JsonPropertyName("sec-fetch-mode")]
+        public string sec_fetch_mode { get; set; }
+        [JsonPropertyName("sec-fetch-site")]
+        public string sec_fetch_site { get; set; }
+        [JsonPropertyName("sec-fetch-user")]
+        public string sec_fetch_user { get; set; }
+        [JsonPropertyName("sec-gpc")]
+        public string sec_gpc { get; set; }
+        [JsonPropertyName("upgrade-insecure-requests")]
+        public string upgrade_insecure_requests { get; set; }
+        [JsonPropertyName("user-agent")]
+        public string user_agent { get; set; }
+        [JsonPropertyName("x-forwarded-proto")]
+        public string x_forwarded_proto { get; set; }
+        [JsonPropertyName("x-real-ip")]
+        public string x_real_ip { get; set; }
+    }
+    public class ip_security
+    {
+        public int clientTcpRtt { get; set; }
+        public string tlsCipher { get; set; }
+        public string tlsVersion { get; set; }
+        public string httpProtocol { get; set; }
+    }
+    public class ip_ip
+    {
+        public string IP { get; set; }
+        public string Continent { get; set; }
+        public string Country { get; set; }
+        public string Region { get; set; }
+        public string RegionCode { get; set; }
+        public string City { get; set; }
+        //public string Latitude { get; set; }
+        //public string Longitude { get; set; }
+        public string Colo { get; set; }
+        public int ASN { get; set; }
+        public string ASOrganization { get; set; }
+        public string Timezone { get; set; }
+    }
+
+   
+
+}

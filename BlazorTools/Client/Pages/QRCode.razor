@@ -1,0 +1,121 @@
+﻿@page "/qrcode"
+@inject IJSRuntime JS
+<h3>二维码</h3>
+<div id="qrcode"></div>
+
+<br />
+<div class="input-group mb-3">
+    <input @bind-value="@ip_KeyLen" type="text" class="form-control" placeholder="输入字符串">
+    <button type="button" class="btn btn-primary" onclick="@btnClick">生成</button>
+</div>
+<br />
+<p>识别图片</p>
+<img id="helloimg" width="100" height="100"/>
+<InputFile OnChange="@LoadFiles"  accept="image/x-png,image/gif,image/jpeg,image/bmp"/>
+<p>@deResult</p>
+@code {
+    #region 上传区域
+    private List<IBrowserFile> loadedFiles = new();
+    private long maxFileSize = 1024 * 15;
+    private int maxAllowedFiles = 3;
+    private bool isLoading;
+    private string deResult { get; set; } = "";
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+        loadedFiles.Clear();
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            try
+            {
+                if (file.ContentType.IndexOf("image") >= 0)
+                {
+                    var stream = file.OpenReadStream();
+
+                    byte[] buf = new byte[stream.Length];
+                    await stream.ReadAsync(buf);
+                    await JS.InvokeVoidAsync("decodeQRCode", "helloimg", buf);
+                }
+                loadedFiles.Add(file);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        isLoading = false;
+    }
+    static Func<string,Task> refreshPanel;
+    [JSInvokable]
+    public static async Task ReturnDeCode(string decodeResult)
+    {
+        await refreshPanel.Invoke(decodeResult);
+
+    }
+
+    #endregion
+    #region 二维码生成区域
+    string ip_KeyLen { get; set; } = "hello world";
+    async Task btnClick(EventArgs e)
+    {
+        await JS.InvokeVoidAsync("generateQRCode", ip_KeyLen);
+    }
+    #endregion
+
+
+    static string scriptInit()
+    {
+        return $@"
+    var qrcode=new QRCode(""qrcode"",{{
+    correctLevel: 3,
+    width:350,
+    height:350,
+     text: 'hello blazor',
+    }});
+
+    function generateQRCode(str){{
+        qrcode.makeCode(str);
+    }}    
+
+    function decodeQRCode(imageElementId, buf){{
+        const arrayBuffer = buf;//await imageStream.arrayBuffer();
+        const blob = new Blob([arrayBuffer]);
+        const url = URL.createObjectURL(blob);
+        const image = document.getElementById(imageElementId);
+        image.onload = () => {{
+            URL.revokeObjectURL(url);
+            const qr = new QrcodeDecoder();
+            qr.decodeFromImage(image).then((res) => {{
+                console.log(res);
+                if(res!=false){{DotNet.invokeMethod('BlazorTools.Client', 'ReturnDeCode', res.data);}}
+            }});                      
+        }}
+        image.src = url;
+    }}
+";
+
+    }
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await base.OnAfterRenderAsync(firstRender);
+        if (firstRender)
+        {
+            string scriptContent;
+            using (var stream = this.GetType().Assembly.GetManifestResourceStream(this.GetType().Assembly.GetName().Name + ".Pages.QRCode.razor.js"))
+            {
+                using (var sr = new System.IO.StreamReader(stream))
+                    scriptContent = await sr.ReadToEndAsync();
+            }
+            await JS.InvokeVoidAsync("eval", scriptContent);
+            await JS.InvokeVoidAsync("eval", scriptInit());
+            refreshPanel = (str)=> { 
+                deResult=str;
+                StateHasChanged();
+                return Task.CompletedTask;
+            };
+        }
+
+    }
+}

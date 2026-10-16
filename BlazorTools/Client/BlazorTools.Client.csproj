@@ -1,0 +1,57 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<BlazorCacheBootResources>false</BlazorCacheBootResources>
+		<ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
+
+		<!--https://learn.microsoft.com/zh-cn/dotnet/core/deploying/trimming/trimming-options?pivots=dotnet-6-0-->
+		<PublishTrimmed>true</PublishTrimmed>
+		<InvariantGlobalization>true</InvariantGlobalization>
+		<!--<BlazorEnableTimeZoneSupport>true</BlazorEnableTimeZoneSupport>-->
+		<EventSourceSupport>false</EventSourceSupport>
+		<HttpActivityPropagationSupport>false</HttpActivityPropagationSupport>
+		<EnableUnsafeBinaryFormatterSerialization>false</EnableUnsafeBinaryFormatterSerialization>
+		<MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+		<UseNativeHttpHandler>true</UseNativeHttpHandler>
+		<UseSystemResourceKeys>true</UseSystemResourceKeys>
+	</PropertyGroup>
+	<ItemGroup>
+		<ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Remove="Pages\ColorPicker.razor.css" />
+		<None Remove="Pages\ColorPicker.razor.js" />
+		<None Remove="Pages\QRCode.razor.js" />
+		<None Remove="Pages\RsaTools.razor.js" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Pages\ColorPicker.razor.css" />
+		<EmbeddedResource Include="Pages\ColorPicker.razor.js" />
+		<EmbeddedResource Include="Pages\QRCode.razor.js" />
+		<EmbeddedResource Include="Pages\RsaTools.razor.js" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.11" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.11" PrivateAssets="all" />
+		<PackageReference Include="SixLabors.ImageSharp" Version="3.1.5" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\BlazorTools.FFmpegConvert\BlazorTools.FFmpegConvert.csproj" />
+		<ProjectReference Include="..\Shared\BlazorTools.Shared.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+		<BlazorWebAssemblyLazyLoad Include="BlazorTools.FFmpegConvert.wasm" />
+		<BlazorWebAssemblyLazyLoad Include="FFmpegBlazor.wasm" />
+		<BlazorWebAssemblyLazyLoad Include="SixLabors.ImageSharp.wasm" />
+	</ItemGroup>
+	<ItemGroup>
+		<Folder Include="Properties\PublishProfiles\" />
+	</ItemGroup>
+
+</Project>

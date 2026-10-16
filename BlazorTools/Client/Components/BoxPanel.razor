@@ -1,0 +1,100 @@
+﻿@inject NavigationManager Navigation
+
+<style>
+    .box {
+    border: 1px solid #ccc;
+    position: static;
+    border-radius: 4px;
+    transition: box-shadow .3s ease-in-out
+    }
+
+    .box:hover {
+    box-shadow: 0 3px 8px 0 rgba(0,0,0,.2)
+    }
+
+    .box-main {
+    padding: 10px 15px 10px 8px;
+    position: relative
+    }
+
+    .box a {
+    color: #333;
+    display: inline-block;
+    text-decoration: none
+    }
+
+
+    .box h3 {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1.4;
+    height: 22px;
+    overflow: hidden
+    }
+
+    .box .box-link {
+    float: left;
+    margin-top: 3px;
+    color: #999;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap
+    }
+
+    .box .box-btn {
+    font-size: 35px;
+    }
+
+    .box .box-enter {
+    float: right;
+    margin-bottom: 7px;
+    }
+
+    .box .box-foot {
+    place-self: center;
+    }
+</style>
+
+<div class="box">
+    <div class="box-main">
+        <div class="box-enter">
+            <a class="box-btn" href="javascript:void(0);" @onclick="@(e=>Navigation.NavigateTo(navUrl))">
+                <svg class="icon" style="width: 1em;height: 1em;vertical-align: middle;fill: currentColor;overflow: hidden;" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="21878">
+                    <path class="st0" d="M938.7,917.3H85.3c-35.3,0-64-28.7-64-64l0,0V170.7c0-35.3,28.7-64,64-64c0,0,0,0,0,0h853.3	c35.3,0,64,28.7,64,64c0,0,0,0,0,0v682.7C1002.7,888.7,974,917.3,938.7,917.3L938.7,917.3z M149.3,789.3h725.3V234.7H149.3V789.3z" />
+                    <path class="st0" d="M469.3,704c-16.4,0-32.8-6.2-45.3-18.7l-128-128c-25-25-25-65.5,0-90.5l128-128c24.6-25.4,65.1-26.1,90.5-1.6	c25.4,24.6,26.1,65.1,1.6,90.5c-0.5,0.5-1,1.1-1.6,1.6L431.8,512l82.7,82.7c25,25,25,65.5,0,90.5C502.6,697.2,486.3,704,469.3,704z" />
+                    <path class="st0" d="M682.7,576l-341.3,0c-35.3,0-64-28.7-64-64s28.7-64,64-64l277.3,0v-64c0-35.3,28.7-64,64-64s64,28.7,64,64v128	c0.1,35.3-28.5,63.9-63.7,64C682.8,576,682.8,576,682.7,576z" />
+                    <polyline class="st0" points="21.3,106.7 78.9,107 21.8,163.4 " />
+                    <polyline class="st0" points="1002.7,917.3 947.9,916.7 1002.7,860.2 " />
+                </svg>
+            </a>
+        </div>
+        <div>
+            <h3><a href="javascript:void(0);" @onclick="@(e=>Navigation.NavigateTo(navUrl))">@Title</a></h3>
+        </div>
+        <div>&nbsp;@Desc</div>
+        <div class="box-foot">
+            <a class="box-link" href="javascript:void(0);" @onclick="@(e=>Navigation.NavigateTo(navUrl))">@Href</a>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Desc { get; set; } = "";
+
+    [Parameter]
+    public string navUrl { get; set; } = "counter";
+    [Parameter]
+    public string Title { get; set; } = "test";
+
+    string Href = "";
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Href = Navigation.BaseUri + navUrl;
+    }
+
+}

@@ -1,0 +1,109 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">BlazorTools</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
+    <nav class="flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="floatconversion">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> 浮点转换
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="modbusCRC">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> CRC计算
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="rsatools">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Rsa加密解密
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="urlencoder">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Url编码/解码
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="base64encoder">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Base64编码/解码
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="qrcode">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> 二维码
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="mp4tomp3">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> MP4 to MP3
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="m4atomp3">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> M4A to MP3
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="pictureToBase64">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Img转Base64
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="imgtoicon">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Img转Icon
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="ipinfo">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> IP Info
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="dnsleak">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> DNS泄露
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="jsonstrformate">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> Json格式化
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="dateconvert">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> DateConvert
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="colorpicker">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> ColorPicker
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="numbertochinese">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> 数字转大写
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="strongpwd">
+                <span class="oi oi-list-rich" aria-hidden="true"></span> 强密码生成
+            </NavLink>
+        </div>
+    </nav>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

@@ -1,0 +1,29 @@
+﻿@page "/urlencoder"
+<h3>Url编码/解码</h3>
+<div>
+    <label>编码:</label><br />
+    <textarea style="width:100%;" @bind="@tEncodeStr"></textarea>
+</div>
+<div>
+    <label>解码:</label><br />
+    <textarea style="width:100%;" @bind="@tDecodeStr"></textarea>
+</div>
+<div>
+    <button class="btn btn-light" onclick="@btnEClick">编码</button>
+    <button class="btn btn-light" onclick="@btnDClick">解码</button>
+</div>
+
+@code {
+    string tEncodeStr{ get; set; }
+    string tDecodeStr { get; set; }
+    async Task btnEClick(EventArgs e)
+    {
+        tDecodeStr = System.Web.HttpUtility.UrlEncode(tEncodeStr);
+        StateHasChanged();
+    }
+    async Task btnDClick(EventArgs e)
+    {
+        tEncodeStr = System.Web.HttpUtility.UrlDecode(tDecodeStr);
+        StateHasChanged();
+    }
+}

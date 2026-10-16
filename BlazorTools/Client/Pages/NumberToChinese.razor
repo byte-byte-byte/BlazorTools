@@ -1,0 +1,38 @@
+﻿@page "/numbertochinese"
+@using System.Text.RegularExpressions
+<h3>数字转大写</h3>
+
+
+<div class="input-group">
+    <input class="form-control" @bind-value="@ipData" ></input>
+    <button class="btn btn-primary" >转换</button>
+</div>
+<label>@lbResult</label>
+@code {
+    string lbResult = "";
+    string _ipVal = "";
+    string ipData
+    {
+        get => _ipVal; set
+        {
+            _ipVal = value;
+            if (Decimal.TryParse(_ipVal, out Decimal number))
+            {
+                if (number == 0)
+                {
+                    lbResult = "零元整";
+                    return;
+                }
+                var s = number.ToString("#L#E#D#C#K#E#D#C#J#E#D#C#I#E#D#C#H#E#D#C#G#E#D#C#F#E#D#C#.0B0A");
+                var d = Regex.Replace(s, @"((?<=-|^)[^1-9]*)|((?'z'0)[0A-E]*((?=[1-9])|(?'-z'(?=[F-L\.]|$))))|((?'b'[F-L])(?'z'0)[0A-L]*((?=[1-9])|(?'-z'(?=[\.]|$))))", "${b}${z}");
+                var r = Regex.Replace(d, ".", m => "负元空零壹贰叁肆伍陆柒捌玖空空空空空空空分角拾佰仟万亿兆京垓秭穰"[m.Value[0] - '-'].ToString());
+                if (s.IndexOf("0B0A") >= 0)
+                    r = r + "整";
+                lbResult = r;
+            }
+            else
+                lbResult = "输入有误";
+        }
+    }
+
+}

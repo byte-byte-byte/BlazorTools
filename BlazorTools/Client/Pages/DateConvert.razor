@@ -1,0 +1,83 @@
+﻿@page "/dateconvert"
+<h3>DateConvert</h3>
+
+
+<label>Local</label>
+<div class="input-group">
+    <input class="form-control" step=1 type="datetime-local" @bind="@date"></input>
+    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.DATE))">转换</button>
+</div>
+<br />
+<label>UTC</label>
+<div class="input-group">
+    <input class="form-control" step=1 type="datetime-local" @bind="@dateUtc"></input>
+    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.DATEUTC))">转换</button>
+</div>
+<br />
+
+<label>unix时间(s)</label>
+<div class="input-group">
+    <input class="form-control" @bind-value="@uxTicks" />
+    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.UNIXS))">转换</button>
+</div>
+<br />
+
+<label>unix时间(ms)</label>
+<div class="input-group">
+    <input class="form-control" @bind-value="@uxTickms" />
+    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.UNIXMS))">转换</button>
+</div>
+<br />
+
+<label>C# Ticks</label>
+<div class="input-group">
+    <input class="form-control" @bind-value="@csTick" />
+    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.CSTICK))">转换</button>
+</div>
+<br />
+
+@code {
+    DateTime date = DateTime.Now;
+    DateTime dateUtc;
+    long csTick = 0;
+    long uxTickms, uxTicks;
+    enum Inputenum
+    {
+        DATE,
+        DATEUTC,
+        CSTICK,
+        UNIXS,
+        UNIXMS
+    }
+    private void refreshTime(MouseEventArgs? e, Inputenum itype)
+    {
+        string localID = TimeZoneInfo.Local.Id;
+        DateTime StartDateTime = TimeZoneInfo.ConvertTime(new DateTime(1970, 1, 1), TimeZoneInfo.FindSystemTimeZoneById(localID));
+        switch (itype)
+        {
+            case Inputenum.DATE: break;
+            case Inputenum.DATEUTC:
+                date = TimeZoneInfo.ConvertTimeFromUtc(dateUtc, TimeZoneInfo.Local);
+                break;
+            case Inputenum.CSTICK:
+                date = new DateTime(csTick);
+                break;
+            case Inputenum.UNIXS:
+                date = StartDateTime.AddSeconds(uxTicks);
+                break;
+            case Inputenum.UNIXMS:
+                date = StartDateTime.AddMilliseconds(uxTickms);
+                break;
+        }
+        dateUtc = TimeZoneInfo.ConvertTime(date, TimeZoneInfo.Utc);
+        csTick = date.Ticks;
+        uxTickms = (long)(date - StartDateTime).TotalMilliseconds;
+        uxTicks = (long)(date - StartDateTime).TotalSeconds;
+    }
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        refreshTime(null, Inputenum.DATE);
+    }
+
+}

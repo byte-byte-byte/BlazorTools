@@ -1,0 +1,86 @@
+﻿@page "/test"
+@using SixLabors.ImageSharp;
+@inject IJSRuntime JS
+
+<h3>Test</h3>
+<InputFile @ref="@inputFile" OnChange="@LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp" />
+<div class="input-group mb-3">
+    <input @bind-value="@convertResult" type="text" class="form-control" placeholder="img base64 data">
+    <button type="button" class="btn btn-primary" onclick="@btnClick">预览</button>
+</div>
+<img  src="@convertResult" />
+@if (!string.IsNullOrEmpty(convertResult))
+{
+    <br />
+    <a download="file.ico" href="@convertResult">Download</a>
+}
+
+@code {
+
+    async Task btnClick(EventArgs e)
+    {
+        StateHasChanged();
+    }
+
+
+    private InputFile? inputFile;
+    private List<IBrowserFile> loadedFiles = new();
+    private bool isLoading;
+    private string convertResult { get; set; } = "";
+    private int maxAllowedFiles = 3;
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+        loadedFiles.Clear();
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            try
+            {
+                if (file.ContentType.IndexOf("image") >= 0)
+                {
+                    var stream = file.OpenReadStream();
+                    var ext = System.IO.Path.GetExtension(file.Name).Substring(1);
+                    byte[] buf = new byte[stream.Length];
+                    await stream.ReadAsync(buf);
+                    //convertResult ="data:image/"+ext+";base64,"+ Convert.ToBase64String(buf);
+
+                    Image profileImage = Image.Load(buf);
+                    if (profileImage!=null)
+                    {
+                        if (profileImage.Width > 255 || profileImage.Height > 255)
+                            return;
+                        MemoryStream memory = new MemoryStream();  
+                        profileImage.SaveAsPng(memory);
+                        memory.Position = 0;
+                        MemoryStream iconStream = new MemoryStream();
+                        BinaryWriter iconWritter = new BinaryWriter(iconStream);
+                        iconWritter.Write((short)0);
+                        iconWritter.Write((short)1);
+                        iconWritter.Write((short)1);
+                        iconWritter.Write((byte)profileImage.Width);
+                        iconWritter.Write((byte)profileImage.Height);
+                        iconWritter.Write((short)0);
+                        iconWritter.Write((short)0);
+                        iconWritter.Write((short)32);
+                        iconWritter.Write((int)memory.Length);
+                        iconWritter.Write(22);
+                        iconWritter.Write(memory.GetBuffer(), 0, (int)memory.Length);
+                        iconWritter.Flush();
+                        iconStream.Position = 0;
+                        byte[] buf1 = new byte[iconStream.Length];
+                        await iconStream.ReadAsync(buf1);
+                        convertResult = "data:image/icon;base64," + Convert.ToBase64String(buf1);
+                    }                   
+                }
+                loadedFiles.Add(file);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        isLoading = false;
+    }
+}

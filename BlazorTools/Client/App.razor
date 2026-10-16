@@ -1,0 +1,41 @@
+﻿@using System.Reflection
+@using Microsoft.AspNetCore.Components.WebAssembly.Services
+@inject LazyAssemblyLoader AssemblyLoader
+<Router AppAssembly="@typeof(App).Assembly"
+        AdditionalAssemblies="@lazyLoadedAssemblies"
+        OnNavigateAsync="@OnNavigateAsync">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <p role="alert">Sorry, there's nothing at this address.</p>
+        </LayoutView>
+    </NotFound>
+</Router>
+
+@code {
+    private List<Assembly> lazyLoadedAssemblies = new();
+
+    private async Task OnNavigateAsync(NavigationContext args)
+    {
+        try
+        {
+            string[] pathArray = new string[] { "m4atomp3", "mp4tomp3","imgtoicon" };
+            if (pathArray.Contains(args.Path))
+            {
+                // 这里自定义Demand.Components依赖的程序集，
+                var assemblies = await AssemblyLoader.LoadAssembliesAsync(new[] { "BlazorTools.FFmpegConvert.wasm", "FFmpegBlazor.wasm", "SixLabors.ImageSharp.wasm" });
+                // 添加到路由程序集扫描中
+                lazyLoadedAssemblies.AddRange(assemblies);
+            }
+        }
+        catch (Exception ex)
+        {
+        }
+    }
+}
+
+

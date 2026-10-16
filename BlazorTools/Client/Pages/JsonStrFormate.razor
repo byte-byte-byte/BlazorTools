@@ -1,0 +1,47 @@
+﻿@page "/jsonstrformate"
+@using System.Text.Json
+@using System.Text.Encodings.Web
+@using System.Text.Unicode
+<h3>Json字符串格式化</h3>
+
+
+<div>
+    <p>
+        <button type="button" class="btn btn-primary" onclick="@btnClick1">压缩</button>
+        <button type="button" class="btn btn-primary" onclick="@btnClick">格式化</button>
+    </p>
+    
+    <p>
+        <textarea id="resCalc" style="width:100%; height:500px;" @bind="@textResult"></textarea>
+    </p>
+    
+</div>
+
+@code {
+    //string inputStr = "";
+    string textResult = "";
+    async Task btnClick(EventArgs e)
+    {
+        var jsonDocument = JsonDocument.Parse(textResult);
+        textResult = JsonSerializer.Serialize(jsonDocument, new JsonSerializerOptions()
+        {
+            // 整齐打印
+            WriteIndented = true,
+            //重新编码，解决中文乱码问题
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        });
+        StateHasChanged();
+    }
+    async Task btnClick1(EventArgs e)
+    {
+        var jsonDocument = JsonDocument.Parse(textResult);
+        textResult = JsonSerializer.Serialize(jsonDocument, new JsonSerializerOptions()
+            {
+                // 整齐打印
+                WriteIndented = false,
+                //重新编码，解决中文乱码问题
+                Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+            });
+        StateHasChanged();
+    }
+}

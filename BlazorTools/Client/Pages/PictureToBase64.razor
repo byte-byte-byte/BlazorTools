@@ -1,0 +1,49 @@
+﻿@page "/pictureToBase64"
+<h3>Img转base64</h3>
+<InputFile @ref="@inputFile" OnChange="@LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp" />
+<div class="input-group mb-3">
+    <input @bind-value="@convertResult" type="text" class="form-control" placeholder="img base64 data">
+    <button type="button" class="btn btn-primary" onclick="@btnClick">预览</button>
+</div>
+<img src="@convertResult" />
+
+@code {
+    async Task btnClick(EventArgs e)
+    {
+        StateHasChanged();
+    }
+
+
+    private InputFile? inputFile;
+    private List<IBrowserFile> loadedFiles = new();
+    private bool isLoading;
+    private string convertResult { get; set; } = "";
+    private int maxAllowedFiles = 3;
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+        loadedFiles.Clear();
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            try
+            {
+                if (file.ContentType.IndexOf("image") >= 0)
+                {
+                    var stream = file.OpenReadStream(200000000);
+                    var ext = System.IO.Path.GetExtension(file.Name).Substring(1);
+                    byte[] buf = new byte[stream.Length];
+                    await stream.ReadAsync(buf);
+                    convertResult = "data:image/" + ext + ";base64," + Convert.ToBase64String(buf);
+                }
+                loadedFiles.Add(file);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
+        }
+
+        isLoading = false;
+    }
+}

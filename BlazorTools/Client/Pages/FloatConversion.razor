@@ -1,0 +1,131 @@
+﻿@page "/floatconversion"
+<h3>浮点转换</h3>
+<label class="group-text">浮点数:</label>
+<div class="input-group mb-3">    
+    <input @bind-value="@ip_float" type="text" class="form-control" placeholder="请输入浮点数">
+    <button type="button" class="btn btn-primary" onclick="@btn_ConvertToArray">转换</button>
+</div>
+<label class="group-text">浮点数组(小端模式):</label>
+<div class="input-group mb-3">
+    <input @bind-value="@ip_barray" type="text" class="form-control" placeholder="请输入float对应的数组">
+    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray,2);})">转换</button>
+</div>
+<label class="group-text">Int数组(小端模式):</label>
+<div class="input-group mb-3">
+    <input @bind-value="@ip_barray_int" type="text" class="form-control" placeholder="请输入int32对应的数组">
+    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray_int,0);})">转换</button>
+</div>
+<label class="group-text">UInt数组(小端模式):</label>
+<div class="input-group mb-3">
+    <input @bind-value="@ip_barray_uint" type="text" class="form-control" placeholder="请输入uin32对应的数组">
+    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray_uint,1);})">转换</button>
+</div>
+
+<label class="group-text">Double数组(小端模式):</label>
+<div class="input-group mb-3">
+    <input @bind-value="@ip_barray_double" type="text" class="form-control" placeholder="请输入double对应的数组">
+    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray_double,3);})">转换</button>
+</div>
+
+@code {
+
+    string ip_float{ get; set; }
+    string ip_barray { get; set; }
+    string ip_barray_int{ get; set; }
+    string ip_barray_uint { get; set; }
+    string ip_barray_double { get; set; }
+    void btn_ConvertToArray(EventArgs e)
+    {
+        ip_barray = "";
+        ip_barray_int = "";
+        ip_barray_uint = "";
+        ip_barray_double = "";
+        if (double.TryParse(ip_float, out double val_double))
+        {
+            var bArray = BitConverter.GetBytes(val_double);
+            foreach (var b in bArray)
+                ip_barray_double += b.ToString("X2") + " ";
+
+            float val = (float)val_double;
+            bArray = BitConverter.GetBytes(val);
+            foreach (var b in bArray)
+                ip_barray += b.ToString("X2") + " ";
+
+            bArray = BitConverter.GetBytes((int)val);
+            foreach (var b in bArray)
+                ip_barray_int += b.ToString("X2") + " ";
+
+            bArray = BitConverter.GetBytes((int)val);
+            foreach (var b in bArray)
+                ip_barray_uint += b.ToString("X2") + " ";
+
+
+        }
+        else
+        {
+            ip_barray = "input err";
+            ip_barray_int = "input err";
+            ip_barray_uint = "input err";
+            ip_barray_double = "input err";
+        }
+        StateHasChanged();
+    }
+    void btn_ConvertToInt(string text,int CovType)
+    {
+        ip_float = "input err";
+        var bArray = text.Split(' ');
+        List<byte> bLst = new List<byte>();
+        foreach (var b in bArray)
+        {
+            try
+            {
+                var tmp = Convert.ToByte(b, 16);
+                bLst.Add(tmp);
+            }
+            catch { }
+        }
+
+        if(bLst.Count >= 4)
+        {
+            try {
+                switch (CovType)
+                {
+                    case 0:
+                        ip_float = BitConverter.ToInt32(bLst.ToArray()).ToString();
+                        break;
+                    case 1:
+                        ip_float = BitConverter.ToUInt32(bLst.ToArray()).ToString();
+                        break;
+                    case 2:
+                        ip_float = BitConverter.ToSingle(bLst.ToArray()).ToString();
+                        break;
+                    case 3:
+                        ip_float = BitConverter.ToDouble(bLst.ToArray()).ToString();
+                        break;
+                }
+            }
+            catch { }
+        }
+        StateHasChanged();
+    }
+    //void btn_ConvertToFloat(EventArgs e)
+    //{
+    //    ip_float = "input err";
+    //    var bArray = ip_barray.Split(' ');
+    //    List<byte> bLst = new List<byte>();
+    //    foreach(var b in bArray)
+    //    {
+    //        try { var tmp = Convert.ToByte(b, 16);
+    //            bLst.Add(tmp);
+    //        }
+    //        catch { }
+    //    }
+    //    if(bLst.Count>=4)
+    //    {
+    //        try { ip_float = BitConverter.ToSingle(bLst.ToArray()).ToString(); }
+    //        catch { }
+    //    }
+    //    StateHasChanged();
+
+    //}
+}

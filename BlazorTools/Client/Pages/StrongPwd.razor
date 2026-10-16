@@ -1,0 +1,99 @@
+﻿@page "/strongpwd"
+<h3>强密码生成</h3>
+
+
+<div class="input-group">
+    <label style="margin:5px;">长度</label>
+    <input type="number" @bind-value="@length">
+    <button class="btn btn-primary" @onclick="@(e=>{p_result=GeneratePWD(CK_abc,CK_ABC,CK_Num,CK_Sym,length);StateHasChanged();})">生成</button>
+</div>
+
+<div style="margin:5px;">
+    <label>大写字母</label>
+    <input type="checkbox" checked="@CK_ABC" @bind-value="@CK_ABC">&nbsp;&nbsp;
+    <label>小写字母</label>
+    <input type="checkbox" checked="@CK_abc" @bind-value="@CK_abc">&nbsp;&nbsp;
+    <label>数字</label>
+    <input type="checkbox" checked="@CK_Num" @bind-value="@CK_Num">&nbsp;&nbsp;
+    <label>符号</label>
+    <input type="checkbox" checked="@CK_Sym" @bind-value="@CK_Sym">&nbsp;&nbsp;
+</div>
+
+
+<hr />
+<p>
+    @p_result
+</p>
+
+@code {
+    string p_result { get; set; } = "";
+    int length { get; set; } = 20;
+    bool CK_ABC { get; set; } = true;
+    bool CK_abc { get; set; } = true;
+    bool CK_Num { get; set; } = true;
+    bool CK_Sym { get; set; } = true;
+    char gen_abc()
+    {
+        int[] xiaoxie = new int[] { 97, 122 };
+        Random rd = new Random();
+        return (char)rd.Next(xiaoxie[0], xiaoxie[1] + 1);
+    }
+    char gen_ABC()
+    {
+        int[] daxie = new int[] { 65, 90 };
+        Random rd = new Random();
+        return (char)rd.Next(daxie[0], daxie[1] + 1);
+    }
+    char gen_NumberChar()
+    {
+        int[] shuzi = new int[] { 48, 57 };
+        Random rd = new Random();
+        return (char)rd.Next(shuzi[0], shuzi[1] + 1);
+    }
+    char gen_RDSYMChar()
+    {
+        List<int[]> lst = new List<int[]>
+            {
+                new int[] { 33, 47 },//! /
+                new int[] {58,64 },//: @
+                new int[] { 91,96 },//[ `
+                new int[] { 123, 126 },//{ ~
+            };
+        Random rd = new Random();
+        int idx = rd.Next(0, lst.Count);
+        var array = lst[idx];
+        return (char)rd.Next(array[0], array[1] + 1);
+    }
+
+    delegate char generateChar();
+    public string GeneratePWD(bool abc, bool ABC, bool num, bool sym, int len)
+    {
+        if (len < 10)
+            len = 10;
+        List<generateChar> generates = new List<generateChar>();
+        if (abc)
+            generates.Add(gen_abc);
+        if (ABC)
+            generates.Add(gen_ABC);
+        if (sym)
+            generates.Add(gen_RDSYMChar);
+        if (num)
+            generates.Add(gen_NumberChar);
+        if (generates.Count == 0)
+            return "";
+        lb_Start:
+        string result = "";
+        bool[] array = new bool[generates.Count];
+        Random rnd = new Random();
+        for (int i = 0; i < len; i++)
+        {
+            var idx = rnd.Next(0, generates.Count);
+            array[idx] = true;
+            var fnccc = generates[idx];
+            result += fnccc();
+        }
+        if (array.Contains(false) == true)
+            goto lb_Start;
+        return result;
+    }
+}
