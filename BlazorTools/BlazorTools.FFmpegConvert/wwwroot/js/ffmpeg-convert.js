@@ -2,6 +2,12 @@
 // 0.12 架构变化：ffmpeg 执行移入独立 Worker（class worker），即使单线程 core 也不阻塞主线程，
 // log/progress 经 postMessage 实时送达 —— 进度条可实时刷新，转换期间页面不再冻结。
 //
+// 进度实现说明（重要）：core 0.12.10 的 progress 事件在第二次 exec 时 C 端状态残留
+// （实测 time= 直接是上轮残值、progress 恒 ~1.0，ffmpeg.reset() 只清 ret/timeout 不清进度），
+// 因此本封装不使用 core 的 progress 事件，改为在 log 事件里自行解析
+// "  Duration:"（总时长）与 "size=/frame= ... time="（当前进度）实时计算比例，
+// 对任意次数的转换均正确。
+//
 // 全部资源本地化于 _content/BlazorTools.FFmpegConvert/ffmpeg/：
 //   ffmpeg.js        @ffmpeg/ffmpeg 0.12.10 UMD 主类（script 标签加载，挂 window.FFmpegWASM）
 //   814.ffmpeg.js    class worker（module worker，内部动态 import core）
@@ -19,6 +25,7 @@
 let ffmpeg = null;
 let loadPromise = null;
 let fileCache = null; // { name, bytes: Uint8Array }
+let duration = 0;     // 当前输入时长（秒），自进度解析用，随每轮 Duration 行刷新
 
 function assetURL(name) {
     return new URL('_content/BlazorTools.FFmpegConvert/ffmpeg/' + name, document.baseURI).href;
@@ -34,6 +41,11 @@ function loadScript(src) {
     });
 }
 
+function ts2sec(ts) {
+    const [h, m, s] = ts.split(':');
+    return (parseFloat(h) * 3600) + (parseFloat(m) * 60) + parseFloat(s);
+}
+
 export async function load(dotnetRef) {
     if (ffmpeg && ffmpeg.loaded) return true;
     if (!window.FFmpegWASM) {
@@ -44,10 +56,22 @@ export async function load(dotnetRef) {
         ffmpeg = new FFmpeg();
         ffmpeg.on('log', ({ type, message }) => {
             try { dotnetRef && dotnetRef.invokeMethodAsync('OnLog', type + ': ' + message); } catch { }
-        });
-        ffmpeg.on('progress', ({ progress }) => {
-            const ratio = Math.min(1, Math.max(0, typeof progress === 'number' ? progress : 0));
-            try { dotnetRef && dotnetRef.invokeMethodAsync('OnProgress', ratio); } catch { }
+            // 自算进度（不依赖 core 的 progress 事件，规避其第二次 exec 残值 bug）
+            try {
+                if (typeof message !== 'string') return;
+                if (message.indexOf('  Duration:') === 0 || /Duration: /.test(message)) {
+                    const d = ts2sec(message.split(', ')[0].split(': ')[1]);
+                    if (d > 0) duration = d;
+                } else if (message.indexOf('size=') === 0 || message.indexOf('frame=') === 0) {
+                    const m = message.match(/time=([\d:.]+)/);
+                    if (m && duration > 0) {
+                        const ratio = Math.min(1, Math.max(0, ts2sec(m[1]) / duration));
+                        dotnetRef && dotnetRef.invokeMethodAsync('OnProgress', ratio);
+                    }
+                } else if (message.indexOf('video:') === 0 && duration > 0) {
+                    dotnetRef && dotnetRef.invokeMethodAsync('OnProgress', 1);
+                }
+            } catch { }
         });
     }
     if (!loadPromise) {
@@ -71,6 +95,7 @@ export async function convert(argv, inName, outName, outType) {
     if (!ffmpeg || !ffmpeg.loaded) throw new Error('FFmpeg 核心尚未加载');
     if (!fileCache) throw new Error('尚未选择文件');
     if (fileCache.name !== inName) throw new Error('文件缓存不匹配，请重新选择文件');
+    duration = 0; // 新一轮转换，进度状态归零
     await ffmpeg.writeFile(fileCache.name, fileCache.bytes);
     // 0.12 的 exec 不再自动附加 -nostdin/-y（0.11 的 defaultArgs），需显式携带
     const code = await ffmpeg.exec(['-nostdin', '-y', ...argv]);

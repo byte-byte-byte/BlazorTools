@@ -167,6 +167,7 @@
     {
         if (module is null || busy) return;
         busy = true;
+        progressRatio = 0;
         try
         {
             if (!coreLoaded)
