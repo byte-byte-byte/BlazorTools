@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.10.12224.181 stable
+VisualStudioVersion = 18.10.12224.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlazorTools.Server", "BlazorTools\Server\BlazorTools.Server.csproj", "{60A2EBF6-0B47-4776-AB1F-399328A34AF7}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlazorTools.Shared", "BlazorTools\Shared\BlazorTools.Shared.csproj", "{9C0900A5-CCD8-41BC-8CF0-FF84C81EDBEA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlazorTools.FFmpegConvert", "BlazorTools\BlazorTools.FFmpegConvert\BlazorTools.FFmpegConvert.csproj", "{5D63BD04-E0D0-E073-980B-103B829BE542}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BlazorTools.Cryptography", "BlazorTools\BlazorTools.Cryptography\BlazorTools.Cryptography.csproj", "{D89ECCFC-0078-C2E4-0EC2-2E9CD3A9D8DE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{5D63BD04-E0D0-E073-980B-103B829BE542}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5D63BD04-E0D0-E073-980B-103B829BE542}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{5D63BD04-E0D0-E073-980B-103B829BE542}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D89ECCFC-0078-C2E4-0EC2-2E9CD3A9D8DE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D89ECCFC-0078-C2E4-0EC2-2E9CD3A9D8DE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D89ECCFC-0078-C2E4-0EC2-2E9CD3A9D8DE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D89ECCFC-0078-C2E4-0EC2-2E9CD3A9D8DE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -43,10 +43,13 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\BlazorTools.FFmpegConvert\BlazorTools.FFmpegConvert.csproj" />
+		<ProjectReference Include="..\BlazorTools.Cryptography\BlazorTools.Cryptography.csproj" />
 		<ProjectReference Include="..\Shared\BlazorTools.Shared.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 		<BlazorWebAssemblyLazyLoad Include="BlazorTools.FFmpegConvert.wasm" />
+		<BlazorWebAssemblyLazyLoad Include="BlazorTools.Cryptography.wasm" />
+		<BlazorWebAssemblyLazyLoad Include="BouncyCastle.Cryptography.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="FFmpegBlazor.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="SixLabors.ImageSharp.wasm" />
 	</ItemGroup>

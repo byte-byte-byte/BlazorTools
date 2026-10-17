@@ -120,6 +120,8 @@ else
         new("colorpicker",       "ColorPicker",     "取色与色值格式转换",            "color picker quese qse sezhi hex rgb hsl yanse"),
         new("iprangecalc",       "IP范围计算",      "子网掩码 / 可用 IP 范围计算",   "iprangecalc ip fanwei fw jsq jisuanqi subnet netmask zwym cidr ym lip wangluo network vlan host usable"),
         new("crontabcalc",       "Cron时间计算",    "CRON 表达式校验与未来执行时间", "cron crontab crsjc shijian jisuanqi dingshi renwu schedule task timer jihuarenwu oijh plan"),
+        new("aesencrypt",        "AES加密解密",     "BouncyCastle 实现 AES 六模式加解密", "aes aesjm jiami jiemi mima encrypt decrypt symmetric duichen gcm cbc ecb ctr cfb ofb bouncycastle jiami"),
+        new("rsaencrypt",        "RSA加密解密·BC",  "BouncyCastle 实现 RSA 加解密与密钥生成", "rsa rsabc bouncycastle rsaencrypt jiami jiemi miyao gongyue siyao publickey privatekey pem pkcs1 miyue"),
     };
 
     private sealed record Tool(string Url, string Title, string Desc, string Alias, string? NetNote = null);

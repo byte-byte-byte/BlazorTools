@@ -1,0 +1,18 @@
+﻿/* ==========================================================================
+   RSA 加密解密（BlazorTools.Cryptography RCL）· 页面专属样式（CSS 隔离）
+   —— 本组件由 Client 惰性加载：这里的样式随 RCL 的
+      _content/BlazorTools.Cryptography/BlazorTools.Cryptography.bundle.scp.css
+      （index.html 中的静态 <link>）生效，不依赖程序集的加载时机。
+   —— 通用骨架在 Client 的 wwwroot/css/theme.css「8.5 / 8.6 通用控件」段。
+   ========================================================================== */
+
+/* PEM 密钥是多行长文本，两侧并排时给足高度 */
+.pane-body textarea { min-height: 180px; }
+
+/* 结果是 Base64 长串：限高滚动避免把页面撑长 */
+.out-box.v-rsabc {
+    max-height: 220px;
+    overflow: auto;
+    font-size: .82rem;
+    line-height: 1.7;
+}

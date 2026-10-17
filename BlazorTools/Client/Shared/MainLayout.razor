@@ -1,4 +1,5 @@
 ﻿@using System.Threading
+@using System.Runtime.InteropServices
 @inherits LayoutComponentBase
 @inject NavigationManager Nav
 @implements IDisposable
@@ -29,7 +30,7 @@
             </div>
             <div class="hud-status">
                 <span class="chip chip-live"><i class="dot"></i>ONLINE</span>
-                <span class="chip">.NET 8 · WASM</span>
+                <span class="chip">@RuntimeTag</span>
                 <span class="chip">@clock</span>
             </div>
         </header>
@@ -47,6 +48,16 @@
 </div>
 
 @code {
+    /// <summary>运行时标识：从程序集元数据读取，升级 TFM 后无需手改。</summary>
+    private static readonly string RuntimeTag = DeriveRuntimeTag();
+
+    private static string DeriveRuntimeTag()
+    {
+        var desc = RuntimeInformation.FrameworkDescription;
+        Console.WriteLine(desc);
+        return ".NET " + Environment.Version.Major + " · WASM";
+    }
+
     private Timer? timer;
     private string clock = "--:--:--";
     private string[] crumbs = Array.Empty<string>();

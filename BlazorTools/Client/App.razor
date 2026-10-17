@@ -19,15 +19,30 @@
 @code {
     private List<Assembly> lazyLoadedAssemblies = new();
 
+    /// <summary>按目标路径返回需要惰性加载的程序集清单，各组件依赖互不牵连。</summary>
+    private static List<string> BuildLazyLoadList(string path) => path switch
+    {
+        "m4atomp3" or "mp4tomp3" or "imgtoicon" => new List<string>
+        {
+            "BlazorTools.FFmpegConvert.wasm", "FFmpegBlazor.wasm", "SixLabors.ImageSharp.wasm",
+        },
+        "aesencrypt" or "rsaencrypt" => new List<string>
+        {
+            // BouncyCastle.Cryptography 是 BlazorTools.Cryptography 的依赖，必须一并加载
+            "BlazorTools.Cryptography.wasm", "BouncyCastle.Cryptography.wasm",
+        },
+        _ => new List<string>(),
+    };
+
     private async Task OnNavigateAsync(NavigationContext args)
     {
         try
         {
-            string[] pathArray = new string[] { "m4atomp3", "mp4tomp3","imgtoicon" };
-            if (pathArray.Contains(args.Path))
+            var toLoad = BuildLazyLoadList(args.Path);
+            if (toLoad.Count > 0)
             {
                 // 这里自定义Demand.Components依赖的程序集，
-                var assemblies = await AssemblyLoader.LoadAssembliesAsync(new[] { "BlazorTools.FFmpegConvert.wasm", "FFmpegBlazor.wasm", "SixLabors.ImageSharp.wasm" });
+                var assemblies = await AssemblyLoader.LoadAssembliesAsync(toLoad.ToArray());
                 // 添加到路由程序集扫描中
                 lazyLoadedAssemblies.AddRange(assemblies);
             }

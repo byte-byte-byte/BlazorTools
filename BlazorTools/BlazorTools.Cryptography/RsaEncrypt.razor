@@ -1,0 +1,419 @@
+﻿@page "/rsaencrypt"
+@using Org.BouncyCastle.Crypto
+@using Org.BouncyCastle.Crypto.Encodings
+@using Org.BouncyCastle.Crypto.Engines
+@using Org.BouncyCastle.Crypto.Generators
+@using Org.BouncyCastle.Crypto.Parameters
+@using Org.BouncyCastle.OpenSsl
+@using Org.BouncyCastle.Utilities.IO.Pem
+@using Org.BouncyCastle.Security
+@using Org.BouncyCastle.Asn1
+@using Org.BouncyCastle.Asn1.Pkcs
+@using System.Text
+@inject IJSRuntime JS
+
+<PageTitle>RSA加密解密BC · BlazorTools</PageTitle>
+
+<h3>RSA 加密解密（BouncyCastle）</h3>
+
+<p class="page-note">
+    在浏览器本地（WASM）生成 RSA 密钥对并做加解密，PKCS#1 v1.5 填充，全部由
+    BouncyCastle.Cryptography 在 C# 侧完成，无任何 JS 加密库。
+    密钥与明文都<b>不出本机</b>；2048 位及以上更安全，但生成耗时会明显变长。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">密钥生成</span>
+        <span class="panel-sub">公钥 SPKI / 私钥 PKCS#8 · PEM 格式</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="rsa-len">密钥长度 (bit)</label>
+            <input id="rsa-len" class="form-control" type="number" min="512" step="256"
+                   autocomplete="off" @bind="keyLen" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">常用长度</span>
+        @foreach (var len in KeyLens)
+        {
+            <button type="button" class="chip-btn @(keyLen == len ? "is-on" : null)"
+                    title="@KeyHint(len)"
+                    @onclick="() => keyLen = len">@len</button>
+        }
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="GenKey" disabled="@busy">
+            @(busy ? "生成中…" : "生成密钥对")
+        </button>
+    </div>
+
+    @if (busy)
+    {
+        <div class="stat-strip"><span class="spin">正在生成 @keyLen 位密钥（本地计算，长密钥可能需要数秒到十几秒）</span></div>
+    }
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(pubKey) || !string.IsNullOrEmpty(prvKey))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">密钥对 Key pair</span>
+            <span class="panel-sub">可手动粘贴外部 PEM 密钥</span>
+        </div>
+
+        <div class="io-pair">
+            <div class="pane">
+                <div class="pane-head">
+                    <span class="pane-title">公钥 Public key</span>
+                    <span class="pane-tools">
+                        <button type="button" class="copy-btn" title="复制公钥" aria-label="复制公钥"
+                                @onclick='async () => await Copy(pubKey, "pub")'>@Mark("pub")</button>
+                    </span>
+                </div>
+                <div class="pane-body">
+                    <textarea @bind="pubKey" @bind:event="oninput" spellcheck="false"
+                              placeholder="生成后可手动粘贴外部公钥（SPKI：BEGIN PUBLIC KEY）"></textarea>
+                </div>
+            </div>
+
+            <div class="io-arrow" aria-hidden="true">⇅</div>
+
+            <div class="pane">
+                <div class="pane-head">
+                    <span class="pane-title">私钥 Private key</span>
+                    <span class="pane-tools">
+                        <button type="button" class="copy-btn" title="复制私钥" aria-label="复制私钥"
+                                @onclick='async () => await Copy(prvKey, "prv")'>@Mark("prv")</button>
+                    </span>
+                </div>
+                <div class="pane-body">
+                    <textarea @bind="prvKey" @bind:event="oninput" spellcheck="false"
+                              placeholder="生成后可手动粘贴外部私钥（PKCS#8：BEGIN PRIVATE KEY，兼容 BEGIN RSA PRIVATE KEY）"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">加解密 Encrypt / Decrypt</span>
+        <span class="panel-sub">PKCS#1 v1.5 · 密文 Base64 · 长文本自动分块</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="rsa-plain">明文 Plain text</label>
+            <input id="rsa-plain" class="form-control" type="text" autocomplete="off"
+                   placeholder="要加密的内容" @bind="plainText" @bind:event="oninput" />
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Encrypt">用公钥加密 →</button>
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="rsa-cipher">密文 Cipher (Base64)</label>
+            <input id="rsa-cipher" class="form-control" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="要解密的内容" @bind="cipherText" @bind:event="oninput" />
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Decrypt">← 用私钥解密</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(result))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">结果 Result</span>
+            <span class="panel-tools">
+                <button type="button" class="copy-btn" title="复制结果" aria-label="复制结果"
+                        @onclick='async () => await Copy(result, "res")'>@Mark("res")</button>
+            </span>
+        </div>
+
+        <div class="out-box v-rsabc">@result</div>
+
+        <div class="btn-row">
+            <button type="button" class="btn" @onclick='() => cipherText = result'>填到待解密区</button>
+            <button type="button" class="btn" @onclick='() => plainText = result'>填到待加密区</button>
+            <button type="button" class="btn" @onclick="ClearResult">清空结果</button>
+        </div>
+
+        <div class="stat-strip">
+            <span class="stat-chip">结果 <b>@Len(result)</b> 字符</span>
+            @if (lastChunkCount > 0)
+            {
+                <span class="stat-chip">分块 <b>@lastChunkCount</b> × @(lastBlockSize) 字节</span>
+            }
+        </div>
+    </div>
+}
+
+<p class="page-note rsa-foot">
+    本组件基于 <code>BouncyCastle.Cryptography v2.7.0</code>（Apache-2.0 License）实现：
+    密钥生成 <code>RsaKeyPairGenerator</code>、加解密 <code>RsaEngine</code> + <code>Pkcs1Encoding</code>、
+    PEM 互转 <code>PemWriter / PemReader</code>（公钥 SPKI，私钥 PKCS#8，兼容 PKCS#1）。
+    超过密钥容量的明文自动按 <code>密钥长度 - 11</code> 字节分块加密，解密时按密钥长度分块还原。
+</p>
+
+@code {
+    private static readonly int[] KeyLens = { 1024, 2048, 3072, 4096 };
+
+    private string pubKey = "";
+    private string prvKey = "";
+    private string plainText = "";
+    private string cipherText = "";
+    private string result = "";
+    private int keyLen = 2048;
+    private bool busy = false;
+    private string? error = null;
+    private string copied = "";
+    private int lastChunkCount = 0;
+    private int lastBlockSize = 0;
+
+    private string Mark(string key) => copied == key ? "✓" : "⧉";
+
+    private static int Len(string? s) => s?.Length ?? 0;
+
+    private static string KeyHint(int len) => len switch
+    {
+        1024 => "1024 位：生成快，已不推荐用于新系统",
+        2048 => "2048 位：当前通用下限",
+        3072 => "3072 位：更长的安全寿命",
+        4096 => "4096 位：安全但生成最慢（可能要十几秒）",
+        _ => len + " 位",
+    };
+
+    private async Task Copy(string value, string key)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = key;
+        }
+        catch
+        {
+            copied = "";
+        }
+    }
+
+    private void ClearResult()
+    {
+        result = "";
+        lastChunkCount = 0;
+        lastBlockSize = 0;
+        copied = "";
+        error = null;
+    }
+
+    private async Task GenKey()
+    {
+        error = null;
+        copied = "";
+        result = "";
+        busy = true;
+        StateHasChanged();
+        await Task.Yield(); // 让「生成中…」先渲染出来
+
+        try
+        {
+            int len = Math.Max(512, keyLen);
+
+            var kpg = new RsaKeyPairGenerator();
+            kpg.Init(new KeyGenerationParameters(new SecureRandom(), len));
+            var pair = kpg.GenerateKeyPair();
+
+            pubKey = ToPem(pair.Public);
+            prvKey = ToPem(new Pkcs8Generator(pair.Private));
+        }
+        catch (Exception ex)
+        {
+            error = "密钥生成失败：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    /// <summary>导出 PEM：公钥 SPKI（BEGIN PUBLIC KEY），私钥需先经 Pkcs8Generator 包装。</summary>
+    private static string ToPem(object obj)
+    {
+        using var sw = new StringWriter();
+        new global::Org.BouncyCastle.OpenSsl.PemWriter(sw).WriteObject(obj);
+        return sw.ToString();
+    }
+
+    private static PemObject? ReadPem(string pem)
+    {
+        try
+        {
+            using var sr = new StringReader(pem);
+            return new global::Org.BouncyCastle.OpenSsl.PemReader(sr).ReadPemObject();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>解析 PEM 公钥（SPKI / PKCS#1 两种头均可）。</summary>
+    private static RsaKeyParameters ParsePublicPem(string pem)
+    {
+        var po = ReadPem(pem ?? "")
+            ?? throw new ArgumentException("公钥不是合法的 PEM 格式（应有 -----BEGIN PUBLIC KEY----- 头）。");
+
+        if (po.Type is "PUBLIC KEY" or "RSA PUBLIC KEY")
+        {
+            return PublicKeyFactory.CreateKey(po.Content) as RsaKeyParameters
+                ?? throw new ArgumentException("公钥内容不是 RSA 密钥。");
+        }
+
+        throw new ArgumentException($"这不是公钥 PEM（识别到 {po.Type}）。");
+    }
+
+    /// <summary>解析 PEM 私钥（PKCS#8 / PKCS#1 两种头均可）。</summary>
+    private static RsaPrivateCrtKeyParameters ParsePrivatePem(string pem)
+    {
+        var po = ReadPem(pem ?? "")
+            ?? throw new ArgumentException("私钥不是合法的 PEM 格式（应有 -----BEGIN PRIVATE KEY----- 头）。");
+
+        if (po.Type == "PRIVATE KEY")
+        {
+            return PrivateKeyFactory.CreateKey(po.Content) as RsaPrivateCrtKeyParameters
+                ?? throw new ArgumentException("私钥内容不是 RSA 密钥。");
+        }
+
+        if (po.Type == "RSA PRIVATE KEY")
+        {
+            var s = RsaPrivateKeyStructure.GetInstance(Asn1Object.FromByteArray(po.Content));
+            return new RsaPrivateCrtKeyParameters(s.Modulus, s.PublicExponent, s.PrivateExponent,
+                s.Prime1, s.Prime2, s.Exponent1, s.Exponent2, s.Coefficient);
+        }
+
+        throw new ArgumentException($"这不是私钥 PEM（识别到 {po.Type}）。");
+    }
+
+    private void Encrypt()
+    {
+        error = null;
+        copied = "";
+        result = "";
+        lastChunkCount = 0;
+
+        try
+        {
+            if (string.IsNullOrEmpty(plainText))
+            {
+                error = "明文为空，没有可加密的内容。";
+                return;
+            }
+
+            var pub = ParsePublicPem(pubKey);
+            if (pub.IsPrivate)
+            {
+                error = "「公钥」框里填的是私钥，请填公钥。";
+                return;
+            }
+
+            var data = Encoding.UTF8.GetBytes(plainText);
+            var enc = new Pkcs1Encoding(new RsaEngine());
+            enc.Init(true, pub);
+
+            int chunk = enc.GetInputBlockSize();     // PKCS#1 v1.5：密钥字节数 - 11
+            int block = enc.GetOutputBlockSize();
+            var ms = new MemoryStream();
+
+            for (int off = 0; off < data.Length; off += chunk)
+            {
+                int n = Math.Min(chunk, data.Length - off);
+                byte[] outBlk = enc.ProcessBlock(data, off, n);
+                ms.Write(outBlk, 0, outBlk.Length);
+            }
+
+            lastChunkCount = (data.Length + chunk - 1) / chunk;
+            lastBlockSize = chunk;
+            result = Convert.ToBase64String(ms.ToArray());
+        }
+        catch (ArgumentException ex)
+        {
+            error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            error = "加密失败（检查公钥是否有效）：" + ex.Message;
+        }
+    }
+
+    private void Decrypt()
+    {
+        error = null;
+        copied = "";
+        result = "";
+        lastChunkCount = 0;
+
+        try
+        {
+            if (string.IsNullOrEmpty(cipherText))
+            {
+                error = "密文为空，没有可解密的内容。";
+                return;
+            }
+
+            var prv = ParsePrivatePem(prvKey);
+            var data = Convert.FromBase64String((cipherText ?? "").Replace("\r", "").Replace("\n", "").Replace(" ", ""));
+
+            var enc = new Pkcs1Encoding(new RsaEngine());
+            enc.Init(false, prv);
+
+            int chunk = enc.GetInputBlockSize();     // 解密侧：整块 = 密钥字节数
+            if (data.Length == 0 || data.Length % chunk != 0)
+            {
+                error = $"密文 {data.Length} 字节不是密钥块大小 {chunk} 字节的整数倍（检查密文是否完整、密钥长度是否匹配）。";
+                return;
+            }
+
+            var ms = new MemoryStream();
+            for (int off = 0; off < data.Length; off += chunk)
+            {
+                byte[] outBlk = enc.ProcessBlock(data, off, chunk);
+                ms.Write(outBlk, 0, outBlk.Length);
+            }
+
+            lastChunkCount = data.Length / chunk;
+            lastBlockSize = chunk;
+            result = Encoding.UTF8.GetString(ms.ToArray());
+        }
+        catch (ArgumentException ex)
+        {
+            error = ex.Message;
+        }
+        catch (InvalidCipherTextException)
+        {
+            error = "解密失败：PKCS#1 结构校验未通过（私钥与加密所用公钥不匹配，或密文被篡改）。";
+        }
+        catch (FormatException)
+        {
+            error = "密文不是合法的 Base64 字符串。";
+        }
+        catch (Exception ex)
+        {
+            error = "解密失败：" + ex.Message;
+        }
+    }
+}

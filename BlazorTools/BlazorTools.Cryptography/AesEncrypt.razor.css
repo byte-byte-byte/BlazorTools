@@ -1,0 +1,14 @@
+﻿/* ==========================================================================
+   AES 加密解密（BlazorTools.Cryptography RCL）· 页面专属样式（CSS 隔离）
+   —— 本组件由 Client 惰性加载：这里的样式随 RCL 的
+      _content/BlazorTools.Cryptography/BlazorTools.Cryptography.bundle.scp.css
+      （index.html 中的静态 <link>）生效，不依赖程序集的加载时机。
+   —— 通用骨架在 Client 的 wwwroot/css/theme.css「8.5 / 8.6 通用控件」段。
+   ========================================================================== */
+
+/* 密文是 Base64 / Hex 长串：等宽字体 + 略小字号，便于对齐扫读与复制 */
+.pane-body textarea.is-mono {
+    font-family: var(--font-mono);
+    font-size: .84rem;
+    letter-spacing: .02em;
+}
