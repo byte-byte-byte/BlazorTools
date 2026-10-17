@@ -8,7 +8,7 @@
 
 <p class="page-note">
     基于 ffmpeg.wasm 在浏览器内提取视频音轨并转码为 MP3，文件全程不上传服务器；
-    转码核心已内置于本站静态资源，首次使用约需加载 32 MB。
+    转码核心已内置于本站静态资源，首次使用约需下载 5 MB 的 Brotli 压缩包（ffmpeg-core.wasm.br），浏览器侧自动解压。
 </p>
 
 <div class="panel form-panel">
@@ -172,7 +172,7 @@
         {
             if (!coreLoaded)
             {
-                statusText = "正在加载 FFmpeg 核心（约 32 MB，已内置于本站）…";
+                statusText = "正在下载并解压 FFmpeg 核心（约 5 MB，已内置于本站）…";
                 errorText = null;
                 StateHasChanged();
                 coreLoaded = await module.InvokeAsync<bool>("load", dotnetRef);

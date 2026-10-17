@@ -8,13 +8,18 @@
 // "  Duration:"（总时长）与 "size=/frame= ... time="（当前进度）实时计算比例，
 // 对任意次数的转换均正确。
 //
+// wasm 加载策略（重要）：裸 ffmpeg-core.wasm 约 32 MB，发布管线会生成 Brotli 压缩的
+// ffmpeg-core.wasm.br（约 10 MB）。本封装优先下载 .br 并在浏览器侧解压
+// （优先原生 DecompressionStream('br')，不可用时回退 Client 自带的 decode.min.js 解压器），
+// 以 Blob URL 形式交给 core；.br 不存在（如 dev 环境）时回退裸 .wasm。
+//
 // 全部资源本地化于 _content/BlazorTools.FFmpegConvert/ffmpeg/：
 //   ffmpeg.js        @ffmpeg/ffmpeg 0.12.10 UMD 主类（script 标签加载，挂 window.FFmpegWASM）
 //   814.ffmpeg.js    class worker（module worker，内部动态 import core）
 //   ffmpeg-core.js   @ffmpeg/core 0.12.10 ESM 版（export default createFFmpegCore）
 //                    —— 注意必须用 esm 版：module worker 里 importScripts 不可用，
 //                       814.ffmpeg.js 会走 await import(coreURL)，umd 版无 default 导出会失败
-//   ffmpeg-core.wasm core 0.12.10（31.9 MB）
+//   ffmpeg-core.wasm / ffmpeg-core.wasm.br   core 0.12.10（裸 31.9 MB / Brotli 约 10 MB）
 //
 // 导出（签名与 0.11 版一致，razor 侧无感）：
 //   load(dotnetRef)                         → 加载核心，成功返回 true
@@ -26,6 +31,7 @@ let ffmpeg = null;
 let loadPromise = null;
 let fileCache = null; // { name, bytes: Uint8Array }
 let duration = 0;     // 当前输入时长（秒），自进度解析用，随每轮 Duration 行刷新
+let brotliDecode = null; // decode.min.js 的解压器（按需动态 import），兜底用
 
 function assetURL(name) {
     return new URL('_content/BlazorTools.FFmpegConvert/ffmpeg/' + name, document.baseURI).href;
@@ -39,6 +45,37 @@ function loadScript(src) {
         s.onerror = () => reject(new Error('脚本加载失败: ' + src));
         document.head.appendChild(s);
     });
+}
+
+// 解压 Brotli 字节：优先原生 DecompressionStream('br')（部分浏览器版本不支持 brotli 参数），
+// 失败则动态 import Client 自带的 decode.min.js（与 loadBootResource 解压 .dll 用的是同一个）
+async function brotliDecompress(bytes) {
+    if (typeof DecompressionStream === 'function') {
+        try {
+            const ds = new DecompressionStream('br');
+            const stream = new Blob([bytes]).stream().pipeThrough(ds);
+            return new Uint8Array(await new Response(stream).arrayBuffer());
+        } catch { /* 不支持 'br' 参数则走兜底 */ }
+    }
+    if (!brotliDecode) {
+        const mod = await import(new URL('/js/decode.min.js', document.baseURI).href);
+        brotliDecode = mod.BrotliDecode;
+    }
+    return brotliDecode(bytes); // 返回 Uint8Array
+}
+
+// 拉取 wasm：优先 ffmpeg-core.wasm.br（发布产物，约 1/3 体积）→ 解压后返回；
+// .br 不存在（dev 环境或未压缩发布）时返回 null，由调用方回退裸 .wasm URL
+async function fetchCompressedWasm() {
+    try {
+        const resp = await fetch(assetURL('ffmpeg-core.wasm.br'), { cache: 'force-cache' });
+        if (!resp.ok) return null;
+        const compressed = new Uint8Array(await resp.arrayBuffer());
+        const bytes = await brotliDecompress(compressed);
+        return bytes;
+    } catch {
+        return null;
+    }
 }
 
 function ts2sec(ts) {
@@ -75,11 +112,18 @@ export async function load(dotnetRef) {
         });
     }
     if (!loadPromise) {
-        loadPromise = ffmpeg.load({
+        const loadConfig = {
             coreURL: assetURL('ffmpeg-core.js'),
-            wasmURL: assetURL('ffmpeg-core.wasm'),
             classWorkerURL: assetURL('814.ffmpeg.js')
-        }).catch(e => { loadPromise = null; throw e; });
+        };
+        // 优先走 .br：解压后以 Blob URL 交给 core（避免直接下载 32 MB 裸 wasm）
+        const wasmBytes = await fetchCompressedWasm();
+        if (wasmBytes) {
+            loadConfig.wasmURL = URL.createObjectURL(new Blob([wasmBytes], { type: 'application/wasm' }));
+        } else {
+            loadConfig.wasmURL = assetURL('ffmpeg-core.wasm');
+        }
+        loadPromise = ffmpeg.load(loadConfig).catch(e => { loadPromise = null; throw e; });
     }
     await loadPromise;
     return true;
