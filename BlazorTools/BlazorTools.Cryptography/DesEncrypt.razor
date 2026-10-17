@@ -1,0 +1,393 @@
+﻿@page "/desencrypt"
+@using Org.BouncyCastle.Crypto
+@using Org.BouncyCastle.Crypto.Engines
+@using Org.BouncyCastle.Crypto.Modes
+@using Org.BouncyCastle.Crypto.Paddings
+@using Org.BouncyCastle.Crypto.Parameters
+@using System.Text
+@inject IJSRuntime JS
+
+<PageTitle>DES加密解密 · BlazorTools</PageTitle>
+
+<h3>DES 加密解密</h3>
+
+<p class="page-note">
+    基于 BouncyCastle.Cryptography 的标准 DES（数据加密标准）对称加解密，支持 ECB / CBC / CFB / OFB / CTR 五种模式。
+    密钥 8 字节（64 位，其中 8 位为奇偶校验位，有效强度 56 位）；IV 8 字节。
+    密钥与 IV 不足目标长度时右侧补 <code>0x00</code>，超出则报错；全部计算在你的浏览器内完成。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">参数 Parameters</span>
+        <span class="panel-sub">模式 · 密钥 · 填充</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="des-key">密钥 Key（UTF-8）</label>
+            <input id="des-key"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="@KeyPlaceholder"
+                   @bind="keyText"
+                   @bind:event="oninput" />
+        </div>
+
+        <div class="field">
+            <label for="des-iv">偏移 IV（UTF-8）</label>
+            <input id="des-iv"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="@(IsEcb ? "ECB 模式无需 IV" : IvPlaceholder)"
+                   disabled="@IsEcb"
+                   @bind="ivText"
+                   @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">加密模式</span>
+        @foreach (var m in Modes)
+        {
+            <button type="button" class="chip-btn @(mode == m.Id ? "is-on" : null)"
+                    title="@m.Hint"
+                    @onclick="() => SetMode(m.Id)">@m.Name</button>
+        }
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">密文格式</span>
+        <button type="button" class="chip-btn @(cipherFmt == "base64" ? "is-on" : null)"
+                title="密文以 Base64 编码显示"
+                @onclick='() => SetCipherFmt("base64")'>Base64</button>
+        <button type="button" class="chip-btn @(cipherFmt == "hex" ? "is-on" : null)"
+                title="密文以十六进制显示"
+                @onclick='() => SetCipherFmt("hex")'>Hex</button>
+    </div>
+
+    @if (NeedsPadding)
+    {
+        <div class="chip-row">
+            <span class="chip-row-label">填充</span>
+            <button type="button" class="chip-btn @(padding == "pkcs7" ? "is-on" : null)"
+                    title="PKCS#7：按缺少的字节数填充，解密时自动去除"
+                    @onclick='() => SetPadding("pkcs7")'>PKCS7</button>
+            <button type="button" class="chip-btn @(padding == "zero" ? "is-on" : null)"
+                    title="Zero：右侧补 0x00，解密时去除尾部 0"
+                    @onclick='() => SetPadding("zero")'>Zero</button>
+            <button type="button" class="chip-btn @(padding == "none" ? "is-on" : null)"
+                    title="不填充：明文必须已是 8 字节的整数倍"
+                    @onclick='() => SetPadding("none")'>None</button>
+        </div>
+    }
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">明文 ⇄ 密文</span>
+        <span class="panel-sub">结果输出到对侧输入框</span>
+    </div>
+
+    <div class="io-pair">
+        <div class="pane">
+            <div class="pane-head">
+                <span class="pane-title">明文 Plain text</span>
+                <span class="pane-tools">
+                    <button type="button" class="copy-btn" title="复制明文" aria-label="复制明文"
+                            @onclick='async () => await Copy(plainText, "plain")'>@Mark("plain")</button>
+                </span>
+            </div>
+            <div class="pane-body">
+                <textarea @bind="plainText" @bind:event="oninput" placeholder="要加密的内容"></textarea>
+            </div>
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" @onclick="Encrypt">加密 →</button>
+            </div>
+        </div>
+
+        <div class="io-arrow" aria-hidden="true">⇄</div>
+
+        <div class="pane">
+            <div class="pane-head">
+                <span class="pane-title">密文 Cipher（@(cipherFmt == "hex" ? "Hex" : "Base64")）</span>
+                <span class="pane-tools">
+                    <button type="button" class="copy-btn" title="复制密文" aria-label="复制密文"
+                            @onclick='async () => await Copy(cipherText, "cipher")'>@Mark("cipher")</button>
+                </span>
+            </div>
+            <div class="pane-body">
+                <textarea class="is-mono" @bind="cipherText" @bind:event="oninput"
+                          spellcheck="false" placeholder="要解密的内容（格式与上方「密文格式」一致）"></textarea>
+            </div>
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" @onclick="Decrypt">← 解密</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn" @onclick="Clear">清空全部</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip">明文 <b>@Len(plainText)</b> 字符</span>
+        <span class="stat-chip">密文 <b>@Len(cipherText)</b> 字符</span>
+    </div>
+</div>
+
+<p class="page-note des-foot">
+    本组件加密解密基于 <code>BouncyCastle.Cryptography</code>（Apache-2.0 License）实现，
+    在浏览器 WASM 内本地计算，密钥与数据不出本机。
+    注意：DES 有效强度仅 56 位，只建议用于兼容存量系统；CFB / OFB 采用 64 位全块分段，
+    与 OpenSSL 默认的 CFB8 / OFB8 不兼容，跨平台对接时需确认分段宽度。
+</p>
+
+@code {
+    private static readonly (string Id, string Name, string Hint)[] Modes =
+    {
+        ("ecb", "ECB", "电码本模式：无 IV，相同明文块得到相同密文块，不建议新系统使用"),
+        ("cbc", "CBC", "密码分组链接模式：IV 8 字节"),
+        ("cfb", "CFB", "密码反馈模式（64 位全块分段）：IV 8 字节"),
+        ("ofb", "OFB", "输出反馈模式（64 位全块分段）：IV 8 字节"),
+        ("ctr", "CTR", "计数器模式：IV / 计数器 8 字节"),
+    };
+
+    /// <summary>DES 分组 8 字节，密钥 8 字节（含 8 位奇偶校验，有效 56 位）。</summary>
+    private const int BlockBytes = 8;
+    private const int KeyBytes = 8;
+
+    private string mode = "cbc";
+    private string cipherFmt = "base64";
+    private string padding = "pkcs7";
+
+    private string keyText = "";
+    private string ivText = "";
+    private string plainText = "";
+    private string cipherText = "";
+    private string? error = null;
+    private string copied = "";
+
+    private bool IsEcb => mode == "ecb";
+    private bool NeedsPadding => mode == "ecb" || mode == "cbc";
+
+    private string KeyPlaceholder => $"{KeyBytes} 字节 UTF-8，不足右侧补 0";
+    private string IvPlaceholder => $"{BlockBytes} 字节（不足右侧补 0）";
+
+    private string Mark(string key) => copied == key ? "✓" : "⧉";
+
+    private static int Len(string? s) => s?.Length ?? 0;
+
+    private void SetMode(string id) { mode = id; error = null; }
+    private void SetCipherFmt(string f) { cipherFmt = f; error = null; }
+    private void SetPadding(string p) { padding = p; error = null; }
+
+    private void Clear()
+    {
+        plainText = "";
+        cipherText = "";
+        error = null;
+        copied = "";
+    }
+
+    private async Task Copy(string value, string key)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = key;
+        }
+        catch
+        {
+            copied = "";
+        }
+    }
+
+    /// <summary>密钥按 UTF-8 取字节，右侧补 0 到 8 字节；超出直接报错。</summary>
+    private byte[] DeriveKey()
+    {
+        var bytes = Encoding.UTF8.GetBytes(keyText ?? "");
+
+        if (bytes.Length == 0)
+        {
+            throw new ArgumentException("请输入密钥。");
+        }
+
+        if (bytes.Length > KeyBytes)
+        {
+            throw new ArgumentException($"密钥 {bytes.Length} 字节，超过 DES 的 {KeyBytes} 字节上限。");
+        }
+
+        if (bytes.Length == KeyBytes)
+        {
+            return bytes;
+        }
+
+        var full = new byte[KeyBytes];
+        Array.Copy(bytes, full, bytes.Length);
+        return full;
+    }
+
+    /// <summary>IV 按 UTF-8 取字节，右侧补 0 到 8 字节；超出直接报错。</summary>
+    private byte[] DeriveIv()
+    {
+        var bytes = Encoding.UTF8.GetBytes(ivText ?? "");
+
+        if (bytes.Length > BlockBytes)
+        {
+            throw new ArgumentException($"IV {bytes.Length} 字节，超过所需 {BlockBytes} 字节。");
+        }
+
+        if (bytes.Length == BlockBytes)
+        {
+            return bytes;
+        }
+
+        var full = new byte[BlockBytes];
+        Array.Copy(bytes, full, bytes.Length);
+        return full;
+    }
+
+    private string ToCipherText(byte[] data) =>
+        cipherFmt == "hex" ? Convert.ToHexString(data) : Convert.ToBase64String(data);
+
+    private byte[] FromCipherText(string s)
+    {
+        var t = (s ?? "").Trim();
+        if (t.Length == 0)
+        {
+            throw new ArgumentException("密文为空，没有可解密的内容。");
+        }
+
+        if (cipherFmt == "hex")
+        {
+            t = t.Replace(" ", "").Replace("\t", "").Replace("\r", "").Replace("\n", "")
+                 .Replace("-", "").Replace(":", "");
+            return Convert.FromHexString(t);
+        }
+
+        return Convert.FromBase64String(t.Replace("\r", "").Replace("\n", "").Replace(" ", ""));
+    }
+
+    /// <summary>分组模式（ECB/CBC）的密码器：按所选填充构造。</summary>
+    private IBufferedCipher BuildPaddedCipher(bool cbc)
+    {
+        var engine = new DesEngine();
+        return padding switch
+        {
+            "none" => new BufferedBlockCipher(cbc ? new CbcBlockCipher(engine) : engine),
+            "zero" => new PaddedBufferedBlockCipher(cbc ? new CbcBlockCipher(engine) : engine, new ZeroBytePadding()),
+            _      => new PaddedBufferedBlockCipher(cbc ? new CbcBlockCipher(engine) : engine, new Pkcs7Padding()),
+        };
+    }
+
+    private void Encrypt()
+    {
+        error = null;
+        copied = "";
+
+        try
+        {
+            var data = Encoding.UTF8.GetBytes(plainText ?? "");
+            if (data.Length == 0)
+            {
+                error = "明文为空，没有可加密的内容。";
+                return;
+            }
+
+            var key = DeriveKey();
+
+            IBufferedCipher cipher = mode switch
+            {
+                "cfb" => new BufferedBlockCipher(new CfbBlockCipher(new DesEngine(), 64)),
+                "ofb" => new BufferedBlockCipher(new OfbBlockCipher(new DesEngine(), 64)),
+                "ctr" => new BufferedBlockCipher(new SicBlockCipher(new DesEngine())),
+                "cbc" => BuildPaddedCipher(cbc: true),
+                _     => BuildPaddedCipher(cbc: false),
+            };
+
+            ICipherParameters p = IsEcb
+                ? new KeyParameter(key)
+                : new ParametersWithIV(new KeyParameter(key), DeriveIv());
+
+            cipher.Init(true, p);
+            var buf = new byte[cipher.GetOutputSize(data.Length)];
+            int len = cipher.ProcessBytes(data, 0, data.Length, buf, 0);
+            len += cipher.DoFinal(buf, len);
+
+            cipherText = ToCipherText(buf[..len]);
+        }
+        catch (ArgumentException ex)
+        {
+            error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            error = "加密失败：" + ex.Message;
+        }
+    }
+
+    private void Decrypt()
+    {
+        error = null;
+        copied = "";
+
+        try
+        {
+            var data = FromCipherText(cipherText);
+            var key = DeriveKey();
+
+            IBufferedCipher cipher = mode switch
+            {
+                "cfb" => new BufferedBlockCipher(new CfbBlockCipher(new DesEngine(), 64)),
+                "ofb" => new BufferedBlockCipher(new OfbBlockCipher(new DesEngine(), 64)),
+                "ctr" => new BufferedBlockCipher(new SicBlockCipher(new DesEngine())),
+                "cbc" => BuildPaddedCipher(cbc: true),
+                _     => BuildPaddedCipher(cbc: false),
+            };
+
+            ICipherParameters p = IsEcb
+                ? new KeyParameter(key)
+                : new ParametersWithIV(new KeyParameter(key), DeriveIv());
+
+            cipher.Init(false, p);
+            var buf = new byte[cipher.GetOutputSize(data.Length) + 8];
+            int len = cipher.ProcessBytes(data, 0, data.Length, buf, 0);
+            len += cipher.DoFinal(buf, len);
+
+            plainText = Encoding.UTF8.GetString(buf[..len]);
+        }
+        catch (ArgumentException ex)
+        {
+            error = ex.Message;
+        }
+        catch (InvalidCipherTextException)
+        {
+            error = "解密失败：填充校验未通过（密钥 / IV 不匹配，或密文被篡改）。";
+        }
+        catch (DataLengthException ex)
+        {
+            error = "解密失败：密文长度不是 8 字节的整数倍（当前填充为 None），或密文不完整。" + ex.Message;
+        }
+        catch (FormatException)
+        {
+            error = $"密文不是合法的 {(cipherFmt == "hex" ? "十六进制" : "Base64")} 字符串。";
+        }
+        catch (Exception ex)
+        {
+            error = "解密失败：" + ex.Message;
+        }
+    }
+}
