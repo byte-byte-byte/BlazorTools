@@ -5,3 +5,50 @@
     outline: 2px solid rgba(var(--accent-rgb), .7);
     outline-offset: 2px;
 }
+
+/* 收藏星标：仅卡片右上角使用（按样式分层规则放本文件）。 */
+.box-fav {
+    position: absolute;
+    top: .5rem;
+    right: .5rem;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(20, 30, 48, .78);
+    color: var(--txt-2);
+    cursor: pointer;
+    opacity: .6;
+    transition: opacity .2s ease, color .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease;
+}
+
+    .box-fav svg { width: 13px; height: 13px; }
+
+    .box-fav:hover {
+        opacity: 1;
+        background: rgba(255, 176, 32, .1);
+        border-color: rgba(255, 176, 32, .5);
+        color: var(--warn);
+    }
+
+    .box-fav:focus-visible {
+        opacity: 1;
+        outline: 1px solid rgba(var(--accent-rgb), .7);
+        outline-offset: 1px;
+    }
+
+/* 已收藏：常亮 + 琥珀色 */
+.box-fav.on {
+    opacity: 1;
+    color: var(--warn);
+    border-color: rgba(255, 176, 32, .45);
+    background: rgba(255, 176, 32, .13);
+    text-shadow: 0 0 8px rgba(255, 176, 32, .45);
+}
+
+    .box-fav.on:hover { box-shadow: 0 0 12px rgba(255, 176, 32, .3); }
+
