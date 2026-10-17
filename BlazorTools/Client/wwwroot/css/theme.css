@@ -1102,6 +1102,229 @@ hr {
     background: linear-gradient(90deg, rgba(var(--accent-rgb), .5), rgba(var(--accent-rgb), .06), transparent);
 }
 
+/* ============ 8.5 通用控件：字段栅格 / 胶囊按钮 / 结果卡片 / 提示条 ============
+   —— 这些是全局可复用件（任何页面都能用），不带业务语义：
+      .page-note    页面说明文字
+      .form-panel   表单卡片容器（配合 .panel 使用）
+      .form-grid / .field      自适应多列表单栅格 + 「标签 + 控件」单元
+      .chip-row / .chip-btn    横向胶囊按钮组（可切换 .is-on）
+      .btn-row      按钮行
+      .alert-box    提示条（默认错误；可加 .is-warn / .is-info 换色调）
+      .metric-grid / .metric   结果卡片墙 + 键值卡片（.is-hi 强调 / .is-wide 整行）
+      .metric-k / .metric-v / .metric-hint   卡片内的键 / 值 / 补充说明
+      .copy-btn     卡片右上角的复制按钮（父元素需 position: relative）
+   —— 某个页面要在此之上做专属调整，写在自己的 Xxx.razor.css（CSS 隔离）里。
+   ========================================================================== */
+
+.page-note {
+    max-width: 78ch;
+    margin: .3rem 0 1.1rem;
+    color: var(--txt-2);
+    font-size: .86rem;
+}
+
+    .page-note code {
+        padding: .05rem .3rem;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        background: rgba(255, 255, 255, .04);
+        color: var(--accent);
+        font-size: .82rem;
+    }
+
+.form-panel { margin-bottom: 1.1rem; }
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.field { display: flex; flex-direction: column; gap: .4rem; min-width: 0; }
+
+    .field > label {
+        font: 600 10px/1.4 var(--font-mono);
+        letter-spacing: .16em;
+        text-transform: uppercase;
+        color: var(--txt-3);
+    }
+
+    .field .form-control { width: 100%; }
+
+.chip-row { display: flex; align-items: center; gap: .45rem; flex-wrap: wrap; margin-top: 1.05rem; }
+
+.chip-row-label {
+    margin-right: .1rem;
+    font: 600 10px/1.4 var(--font-mono);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--txt-3);
+}
+
+.chip-btn {
+    padding: .22rem .62rem;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    background: rgba(255, 255, 255, .03);
+    color: var(--txt-2);
+    font: 600 11px/1.5 var(--font-mono);
+    cursor: pointer;
+    transition: color .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+    .chip-btn:hover {
+        color: #fff;
+        border-color: rgba(var(--accent-rgb), .5);
+        background: rgba(var(--accent-rgb), .12);
+    }
+
+    .chip-btn.is-on {
+        color: #eafcff;
+        border-color: rgba(var(--accent-rgb), .62);
+        background: rgba(var(--accent-rgb), .16);
+        box-shadow: 0 0 14px rgba(var(--accent-rgb), .28);
+    }
+
+.btn-row { display: flex; gap: .6rem; flex-wrap: wrap; margin-top: 1.05rem; }
+
+.alert-box {
+    display: flex;
+    align-items: center;
+    gap: .65rem;
+    margin: 1rem 0 0;
+    padding: .72rem .9rem;
+    border: 1px solid rgba(255, 77, 109, .35);
+    border-left: 3px solid var(--err);
+    border-radius: var(--r-sm);
+    background: rgba(255, 77, 109, .08);
+    color: #ffd7de;
+    font-size: .86rem;
+}
+
+    /* 色调变体：默认红=错误，琥珀=警告，主色=提示 */
+    .alert-box.is-warn {
+        border-color: rgba(255, 176, 32, .38);
+        border-left-color: var(--warn);
+        background: rgba(255, 176, 32, .08);
+        color: #ffe6bd;
+    }
+
+    .alert-box.is-info {
+        border-color: rgba(var(--accent-rgb), .38);
+        border-left-color: var(--accent);
+        background: rgba(var(--accent-rgb), .08);
+        color: #d7f8ff;
+    }
+
+.alert-box-ico {
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(255, 77, 109, .22);
+    color: var(--err);
+    font: 700 12px/1 var(--font-mono);
+}
+
+    .alert-box.is-warn .alert-box-ico { background: rgba(255, 176, 32, .22); color: var(--warn); }
+    .alert-box.is-info .alert-box-ico { background: rgba(var(--accent-rgb), .22); color: var(--accent); }
+
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+    gap: .8rem;
+    margin-top: 1.15rem;
+}
+
+.metric {
+    position: relative;
+    padding: .78rem 2.7rem .85rem 1rem; /* 右侧留白给 .copy-btn */
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+    background: var(--panel);
+    overflow: hidden;
+    transition: border-color .2s ease, background .2s ease;
+}
+
+    .metric::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: linear-gradient(180deg, rgba(var(--accent-rgb), .8), transparent);
+        opacity: .3;
+        transition: opacity .2s ease, box-shadow .2s ease;
+    }
+
+    .metric:hover { border-color: var(--line-2); }
+
+    .metric.is-wide { grid-column: 1 / -1; }
+
+    .metric.is-hi::before { opacity: 1; box-shadow: 0 0 14px rgba(var(--accent-rgb), .55); }
+
+.metric-k {
+    font: 600 10px/1.4 var(--font-mono);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--txt-3);
+}
+
+.metric-v {
+    margin-top: .28rem;
+    font-family: var(--font-mono);
+    font-size: .96rem;
+    color: var(--txt);
+    word-break: break-all;
+}
+
+    .metric.is-hi .metric-v {
+        font-size: 1.18rem;
+        color: #eafcff;
+        text-shadow: 0 0 16px rgba(var(--accent-rgb), .35);
+    }
+
+.metric-hint { margin-top: .3rem; color: var(--txt-3); font-size: .76rem; line-height: 1.5; }
+
+.copy-btn {
+    position: absolute;
+    top: .55rem;
+    right: .55rem;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .03);
+    color: var(--txt-2);
+    font-size: .82rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .16s ease, border-color .16s ease, background .16s ease;
+}
+
+    .copy-btn:hover {
+        color: var(--accent);
+        border-color: rgba(var(--accent-rgb), .5);
+        background: rgba(var(--accent-rgb), .12);
+    }
+
+    .copy-btn.is-done {
+        color: var(--ok);
+        border-color: rgba(0, 255, 163, .45);
+        background: rgba(0, 255, 163, .1);
+    }
+
+@media (max-width: 560px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .metric-grid { grid-template-columns: 1fr; }
+}
+
 /* ============ 9. 链接 / 表格 / 其它 ============ */
 a { color: var(--accent); text-decoration: none; transition: text-shadow .18s ease, color .18s ease; }
 a:hover { text-shadow: 0 0 12px rgba(var(--accent-rgb), .6); }

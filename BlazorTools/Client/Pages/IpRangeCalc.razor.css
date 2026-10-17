@@ -1,0 +1,41 @@
+/* ==========================================================================
+   IP 地址范围计算器 · 页面专属样式（CSS 隔离，作用域仅限本组件）
+   --------------------------------------------------------------------------
+   放这里的原则：只有本页用得上、换了别的工具就没意义的微调。
+   通用骨架（.form-grid / .chip-btn / .metric-grid / .metric / .copy-btn …）
+   在 wwwroot/css/theme.css 的「8.5 通用控件」段，任何页面都能复用。
+
+   注意：Blazor 会重写成本组件专有的选择器，如 `.metric-v[b-xxxxxx]`，
+   特异性 (0,2,0) 高于 theme.css 里的 `.metric-v` (0,1,0)，
+   所以这里只写「覆盖/微调」，不要整块重写，否则以后改全局会不同步。
+   ========================================================================== */
+
+/* 本页的值都是 IP 串和 32 位二进制，比普通结果长，列宽放宽一点 */
+.form-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.metric-grid {
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+/* IP / 数量用等宽表格数字，位数变化时宽度不跳动 */
+.metric-v {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .02em;
+}
+
+/* 可用 IP 范围：短横线两侧的字距拉开一点，避免和 IP 粘成一坨 */
+.v-range { letter-spacing: .05em; }
+
+/* 32 位二进制掩码：分组显示，字号降一档才排得进一行 */
+.v-bin {
+    font-size: .8rem;
+    letter-spacing: .1em;
+    line-height: 1.8;
+    color: var(--txt-2);
+}
+
+@media (max-width: 560px) {
+    .v-bin { letter-spacing: .04em; }
+}

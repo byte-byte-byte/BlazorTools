@@ -1,0 +1,426 @@
+@page "/iprangecalc"
+@using System.Net
+@using System.Net.Sockets
+@inject IJSRuntime JS
+
+<PageTitle>IP地址范围计算器 · BlazorTools</PageTitle>
+
+<h3>IP地址范围计算器</h3>
+
+<p class="page-note">
+    输入 IPv4 地址与子网掩码（支持 <code>255.255.255.0</code> 与 <code>/24</code> 两种写法），
+    计算网络地址、广播地址与可用 IP 范围。全部在浏览器本地完成，不发出任何网络请求。
+</p>
+
+<div class="panel form-panel">
+    <div class="form-grid">
+        <div class="field">
+            <label for="ipc-ip">IP 地址</label>
+            <input id="ipc-ip"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="例如 192.168.0.12"
+                   @bind="ipText"
+                   @bind:event="oninput"
+                   @onkeydown="OnKeyDown" />
+        </div>
+
+        <div class="field">
+            <label for="ipc-mask">子网掩码 / 前缀</label>
+            <input id="ipc-mask"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="255.255.255.0 或 /24"
+                   @bind="maskText"
+                   @bind:event="oninput"
+                   @onkeydown="OnKeyDown" />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">常用掩码</span>
+        @foreach (var p in Presets)
+        {
+            <button type="button"
+                    class="chip-btn @(PresetActive(p) ? "is-on" : null)"
+                    title="@PresetTitle(p)"
+                    @onclick="() => UsePreset(p)">/@p</button>
+        }
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="Calc">计算</button>
+        <button type="button" class="btn" @onclick="FillDemo">填入示例</button>
+        <button type="button" class="btn" @onclick="Clear">清空</button>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (r is not null)
+{
+    <div class="metric-grid">
+        @foreach (var row in Rows!)
+        {
+            <div class="metric @(row.Hi ? "is-hi" : null) @(row.Wide ? "is-wide" : null)">
+                <div class="metric-k">@row.K</div>
+                <div class="metric-v @(row.Css)">@row.V</div>
+                @if (row.Hint is not null)
+                {
+                    <div class="metric-hint">@row.Hint</div>
+                }
+                <button type="button"
+                        class="copy-btn @(copied == row.V ? "is-done" : null)"
+                        title="复制 @row.K"
+                        aria-label="复制 @row.K"
+                        @onclick="() => Copy(row.V)">@(copied == row.V ? "✓" : "⧉")</button>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string ipText = "";
+    private string maskText = "";
+    private Result? r = null;
+    private string? error = null;
+    private string copied = "";
+    private Row[]? Rows = null;
+
+    private static readonly int[] Presets = { 8, 12, 16, 24, 25, 26, 28, 30, 32 };
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            Calc();
+        }
+    }
+
+    private void UsePreset(int prefix)
+    {
+        maskText = "/" + prefix;
+        error = null;
+        // 掩码变了结果就失效，直接重算
+        if (r is not null)
+        {
+            Calc();
+        }
+    }
+
+    private bool PresetActive(int prefix) => TryReadPrefix(maskText) == prefix;
+
+    private static string PresetTitle(int prefix) =>
+        $"/{prefix} · {Dotted(prefix)} · {UsableCountOf(prefix):N0} 个可用地址";
+
+    private static string Dotted(int prefix)
+    {
+        uint mask = prefix == 0 ? 0u : 0xFFFFFFFFu << (32 - prefix);
+        return Ip(mask);
+    }
+
+    private void FillDemo()
+    {
+        ipText = "192.168.0.12";
+        maskText = "/24";
+        Calc();
+    }
+
+    private void Clear()
+    {
+        ipText = "";
+        maskText = "";
+        r = null;
+        Rows = null;
+        error = null;
+        copied = "";
+    }
+
+    private void Calc()
+    {
+        r = null;
+        Rows = null;
+        error = null;
+        copied = "";
+
+        string rawIp = (ipText ?? "").Trim();
+
+        // 兼容把 CIDR 直接写在 IP 框里：192.168.0.12/24（掩码框非空时以掩码框为准）
+        int slash = rawIp.IndexOf('/');
+        if (slash >= 0)
+        {
+            var tail = rawIp[(slash + 1)..].Trim();
+            rawIp = rawIp[..slash].Trim();
+            if (string.IsNullOrWhiteSpace(maskText) && tail.Length > 0)
+            {
+                maskText = tail.StartsWith('/') ? tail : "/" + tail;
+            }
+        }
+
+        if (rawIp.Length == 0)
+        {
+            error = "请填写 IP 地址。";
+            return;
+        }
+
+        if (!IPAddress.TryParse(rawIp, out var addr) || addr.AddressFamily != AddressFamily.InterNetwork)
+        {
+            error = $"“{rawIp}” 不是合法的 IPv4 地址（本工具暂不支持 IPv6）。";
+            return;
+        }
+
+        if (!TryParseMask(maskText, out int prefix, out string maskErr))
+        {
+            error = maskErr;
+            return;
+        }
+
+        r = Compute(addr, prefix);
+        Rows = BuildRows(r);
+    }
+
+    /// <summary>解析掩码：接受 255.255.255.0 与 /24（或裸 24）两种形式。</summary>
+    private static bool TryParseMask(string? text, out int prefix, out string err)
+    {
+        prefix = 0;
+        err = "";
+
+        var s = (text ?? "").Trim();
+        if (s.Length == 0)
+        {
+            err = "请填写子网掩码，支持 255.255.255.0 或 /24 两种写法。";
+            return false;
+        }
+
+        if (s.StartsWith("/"))
+        {
+            s = s[1..].Trim();
+        }
+
+        if (s.Length > 0 && s.All(char.IsAsciiDigit))
+        {
+            if (!int.TryParse(s, out int bits))
+            {
+                err = $"前缀长度 “{s}” 超出可表示范围。";
+                return false;
+            }
+
+            if (bits < 0 || bits > 32)
+            {
+                err = $"前缀长度必须在 0 ~ 32 之间，当前为 /{bits}。";
+                return false;
+            }
+
+            prefix = bits;
+            return true;
+        }
+
+        if (!IPAddress.TryParse(s, out var m) || m.AddressFamily != AddressFamily.InterNetwork)
+        {
+            err = $"子网掩码 “{s}” 无法识别，请填 255.255.255.0 这样的点分十进制或 /24 这样的前缀长度。";
+            return false;
+        }
+
+        uint mask = ToUInt(m.GetAddressBytes());
+        if (!TryWildcardBits(mask, out int bitsFromMask))
+        {
+            err = $"“{s}” 不是合法子网掩码：二进制必须是连续的 1 后跟连续的 0（如 255.255.255.0）。";
+            return false;
+        }
+
+        prefix = bitsFromMask;
+        return true;
+    }
+
+    /// <summary>读取当前掩码框里的前缀长度（仅用于高亮预设按钮，不做校验提示）。</summary>
+    private static int? TryReadPrefix(string? text)
+    {
+        return TryParseMask(text, out int prefix, out _) ? prefix : null;
+    }
+
+    /// <summary>
+    /// 校验掩码是否连续，并返回网络位长度。
+    /// 判据：通配符 ~mask 必须形如 2^k - 1，即 ((wildcard + 1) &amp; wildcard) == 0。
+    /// </summary>
+    private static bool TryWildcardBits(uint mask, out int bits)
+    {
+        bits = 0;
+        uint wildcard = ~mask;
+
+        // 必须显式 unchecked：wildcard = 0xFFFFFFFF 时 wildcard + 1 会溢出 uint
+        unchecked
+        {
+            if (((wildcard + 1) & wildcard) != 0)
+            {
+                return false;
+            }
+        }
+
+        for (uint bit = 0x80000000u; bit != 0 && (mask & bit) != 0; bit >>= 1)
+        {
+            bits++;
+        }
+
+        return true;
+    }
+
+    private static Result Compute(IPAddress addr, int prefix)
+    {
+        uint ip = ToUInt(addr.GetAddressBytes());
+        uint mask = prefix == 0 ? 0u : 0xFFFFFFFFu << (32 - prefix);
+
+        uint network = ip & mask;
+        uint broadcast = network | ~mask;
+
+        ulong total = 1UL << (32 - prefix);
+
+        uint first;
+        uint last;
+        ulong usable;
+        string? hint = null;
+
+        if (prefix <= 30)
+        {
+            first = network + 1;
+            last = broadcast - 1;
+            usable = total - 2;
+        }
+        else if (prefix == 31)
+        {
+            // RFC 3021：/31 点到点链路，两个地址都可用，不扣网络号与广播地址
+            first = network;
+            last = broadcast;
+            usable = 2;
+            hint = "/31 为 RFC 3021 点到点链路，两个地址均可使用，无网络号/广播地址之分。";
+        }
+        else
+        {
+            first = network;
+            last = network;
+            usable = 1;
+            hint = "/32 为单个主机路由，可用 IP 范围即该地址本身。";
+        }
+
+        return new Result(
+            Ip: Ip(ip),
+            Mask: Dotted(prefix),
+            Prefix: prefix,
+            Network: Ip(network),
+            Broadcast: Ip(broadcast),
+            First: Ip(first),
+            Last: Ip(last),
+            Usable: usable,
+            UsableHint: hint,
+            Total: total,
+            Wildcard: Ip(~mask),
+            BinaryMask: Binary(mask),
+            IpClass: ClassOf(ip),
+            Scope: ScopeOf(ip));
+    }
+
+    private static Row[] BuildRows(Result x)
+    {
+        string range = x.First == x.Last
+            ? x.First
+            : $"{x.First} - {x.Last}";
+
+        return new[]
+        {
+            new Row("网络地址 Network", x.Network, Hi: true),
+            new Row("广播地址 Broadcast", x.Broadcast, Hi: true),
+            new Row("可用 IP 范围 Usable Range", range, Hi: true, Wide: true, Css: "v-range"),
+            new Row("可用 IP 数量 Hosts", x.Usable.ToString("N0"), Hi: true, Hint: x.UsableHint),
+            new Row("CIDR 表示", $"{x.Network}/{x.Prefix}"),
+            new Row("子网掩码 Netmask", $"{x.Mask}  (/{x.Prefix})"),
+            new Row("通配符掩码 Wildcard", x.Wildcard),
+            new Row("地址总数 Addresses", x.Total.ToString("N0")),
+            new Row("网络位 / 主机位", $"{x.Prefix} 位 / {32 - x.Prefix} 位"),
+            new Row("地址类别 Class", x.IpClass),
+            new Row("地址用途 Scope", x.Scope),
+            new Row("二进制掩码 Netmask (bin)", x.BinaryMask, Wide: true, Css: "v-bin"),
+        };
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value);
+            copied = value;
+        }
+        catch
+        {
+            // 无剪贴板权限或非安全上下文时静默降级，不影响计算结果
+            copied = "";
+        }
+    }
+
+    /// <summary>按第一个字节判定传统的 A/B/C/D/E 分类。</summary>
+    private static string ClassOf(uint ip)
+    {
+        byte b = (byte)(ip >> 24);
+        return b switch
+        {
+            0 => "A 类保留（0.0.0.0/8 本网络）",
+            < 127 => "A 类（默认 /8）",
+            127 => "A 类 / 环回 127.0.0.0/8",
+            < 192 => "B 类（默认 /16）",
+            < 224 => "C 类（默认 /24）",
+            < 240 => "D 类（组播）",
+            _ => "E 类（保留）",
+        };
+    }
+
+    /// <summary>判定是否属于 RFC 定义的特殊用途地址段。</summary>
+    private static string ScopeOf(uint ip)
+    {
+        byte b0 = (byte)(ip >> 24);
+        byte b1 = (byte)(ip >> 16);
+
+        if (b0 == 10) return "私有地址（RFC 1918）";
+        if (b0 == 172 && b1 >= 16 && b1 <= 31) return "私有地址（RFC 1918）";
+        if (b0 == 192 && b1 == 168) return "私有地址（RFC 1918）";
+        if (b0 == 127) return "环回地址（Loopback）";
+        if (b0 == 169 && b1 == 254) return "链路本地（Link-Local / APIPA）";
+        if (b0 == 100 && b1 >= 64 && b1 <= 127) return "运营商级 NAT（RFC 6598）";
+        if (b0 >= 224 && b0 <= 239) return "组播地址（Multicast）";
+        if (b0 >= 240) return "保留地址";
+
+        return "公网地址";
+    }
+
+    private static uint ToUInt(byte[] b) =>
+        ((uint)b[0] << 24) | ((uint)b[1] << 16) | ((uint)b[2] << 8) | b[3];
+
+    private static string Ip(uint v) =>
+        $"{(v >> 24) & 0xFF}.{(v >> 16) & 0xFF}.{(v >> 8) & 0xFF}.{v & 0xFF}";
+
+    /// <summary>32 位二进制按字节分组显示，方便看清网络位与主机位的分界。</summary>
+    private static string Binary(uint v)
+    {
+        var s = Convert.ToString(v, 2).PadLeft(32, '0');
+        return string.Join(' ', Enumerable.Range(0, 4).Select(i => s.Substring(i * 8, 8)));
+    }
+
+    private static ulong UsableCountOf(int prefix) =>
+        prefix >= 31 ? (ulong)(1 << (32 - prefix)) : (1UL << (32 - prefix)) - 2;
+
+    private sealed record Result(
+        string Ip, string Mask, int Prefix,
+        string Network, string Broadcast,
+        string First, string Last, ulong Usable, string? UsableHint,
+        ulong Total, string Wildcard, string BinaryMask,
+        string IpClass, string Scope);
+
+    private sealed record Row(string K, string V, bool Hi = false, bool Wide = false, string? Hint = null, string? Css = null);
+}
