@@ -1,118 +1,297 @@
 ﻿@page "/ipinfo"
 @using System.Text.Json.Serialization
 @using System.Net
+@using System.Net.Http.Json
+@inject IJSRuntime JS
+
+<PageTitle>IP Info · BlazorTools</PageTitle>
+
 <h3>IpInfo</h3>
-<br />
-<div class="input-group mb-3">
-    <input @bind-value="@ip_address" type="text" class="form-control" placeholder="ip address">
-    <button type="button" class="btn btn-primary" onclick="@btnClickSearch" disabled="@btnDis">查询</button>
-    &nbsp;&nbsp;
-    <button type="button" class="btn btn-primary" onclick="@btnClick" disabled="@btnDis">查看自己</button>
+
+<p class="page-note">
+    查询 IP 的归属地与 ASN 信息。留空点「查看自己」可以同时拿到 IPv4 / IPv6 两个出口地址；
+    填入 IP 后点「查询」只走 IPv4 接口。
+</p>
+
+<div class="alert-box is-warn">
+    <span class="alert-box-ico" aria-hidden="true">!</span>
+    <span>
+        本工具<b>需要联网</b>：会向 <code>ip4.ljjl.net</code> / <code>ip6.ljjl.net</code> 发起请求，
+        你的 IP 与 User-Agent 会暴露给该站点。除此之外的数据都在本地处理。
+    </span>
 </div>
 
-<hr />
-<div class="row">
-    <div class="col-md-6">
-        @rContentv4
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">查询 Query</span>
+        <span class="panel-sub">留空则查自己的出口 IP</span>
     </div>
-    <div class="col-md-6">
-        @rContentv6
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="ip-q">IP 地址</label>
+            <input id="ip-q" class="form-control" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="例如 8.8.8.8（可留空）"
+                   @bind="query" @bind:event="oninput"
+                   @onkeydown='async e => { if (e.Key == "Enter") await Search(); }' />
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Search">查询这个 IP</button>
+        <button type="button" class="btn" disabled="@busy" @onclick="QuerySelf">查看自己</button>
+        <button type="button" class="btn" disabled="@busy" @onclick="FillDemo">填入示例</button>
     </div>
 </div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+<div class="io-pair">
+    <div class="pane">
+        <div class="pane-head">
+            <span class="pane-title">IPv4 出口</span>
+            <span class="pane-tools">
+                @if (v4 is { Count: > 0 })
+                {
+                    <button type="button" class="copy-btn" title="复制 IPv4 信息" aria-label="复制 IPv4 信息"
+                            @onclick='async () => await Copy(Join(v4))'>@(copied == "v4" ? "✓" : "⧉")</button>
+                }
+            </span>
+        </div>
+        <div class="pane-body">
+            @if (busy && v4 is null)
+            {
+                <span class="spin">请求中</span>
+            }
+            else if (v4 is { Count: > 0 })
+            {
+                <div class="kv-list">
+                    @foreach (var kv in v4)
+                    {
+                        <div class="kv-item">
+                            <span class="kv-k">@kv.K</span>
+                            <span class="kv-v @(kv.IsIp ? "v-ip" : null)">@kv.V</span>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <span class="preview-empty">尚无数据</span>
+            }
+        </div>
+    </div>
+
+    <div class="io-arrow" aria-hidden="true">⇅</div>
+
+    <div class="pane">
+        <div class="pane-head">
+            <span class="pane-title">IPv6 出口</span>
+            <span class="pane-tools">
+                @if (v6 is { Count: > 0 })
+                {
+                    <button type="button" class="copy-btn" title="复制 IPv6 信息" aria-label="复制 IPv6 信息"
+                            @onclick='() => Copy2(Join(v6))'>@(copied == "v6" ? "✓" : "⧉")</button>
+                }
+            </span>
+        </div>
+        <div class="pane-body">
+            @if (busy && v6 is null)
+            {
+                <span class="spin">请求中</span>
+            }
+            else if (v6 is { Count: > 0 })
+            {
+                <div class="kv-list">
+                    @foreach (var kv in v6)
+                    {
+                        <div class="kv-item">
+                            <span class="kv-k">@kv.K</span>
+                            <span class="kv-v @(kv.IsIp ? "v-ip" : null)">@kv.V</span>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <span class="preview-empty">尚无数据</span>
+            }
+        </div>
+    </div>
+</div>
+
 @code {
-    bool btnDis = false;
-    string ip_address{ get; set; }
-    RenderFragment? rContentv4 { get; set; }
-    RenderFragment? rContentv6 { get; set; }
-    async Task btnClickSearch(EventArgs e)
+    private string query = "";
+    private List<Kv>? v4 = null;
+    private List<Kv>? v6 = null;
+    private bool busy = false;
+    private string? error = null;
+    private string copied = "";
+
+    private sealed record Kv(string K, string? V, bool IsIp = false);
+
+    private static string Join(List<Kv>? list) =>
+        list is null ? "" : string.Join(Environment.NewLine, list.Where(x => x.V is not null).Select(x => x.K + ": " + x.V));
+
+    private static List<Kv> ToRows(ip_root? root)
     {
-        if (!IPAddress.TryParse(ip_address, out _))
+        var rows = new List<Kv>();
+        if (root?.IP is null)
         {
-            rContentv4 =@<p>Error ip address</p>;
-            StateHasChanged();
+            return rows;
+        }
+
+        rows.Add(new Kv("IP", root.IP.IP, IsIp: true));
+        AddIf(rows, "Continent 洲", root.IP.Continent);
+        AddIf(rows, "Country 国家", root.IP.Country);
+        AddIf(rows, "Region 地区", root.IP.Region);
+        AddIf(rows, "City 城市", root.IP.City);
+        AddIf(rows, "Timezone 时区", root.IP.Timezone);
+        AddIf(rows, "ASN", root.IP.ASN == 0 ? null : "AS" + root.IP.ASN);
+        AddIf(rows, "AS 组织", root.IP.ASOrganization);
+        AddIf(rows, "机房 Colo", root.IP.Colo);
+        AddIf(rows, "UA", root.Headers?.user_agent);
+        AddIf(rows, "HTTP 协议", root.Security?.httpProtocol);
+        AddIf(rows, "TLS 套件", root.Security?.tlsCipher);
+
+        return rows;
+    }
+
+    private static void AddIf(List<Kv> rows, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value) && value != "-")
+        {
+            rows.Add(new Kv(key, value));
+        }
+    }
+
+    private static HttpClient NewClient() => new() { Timeout = TimeSpan.FromSeconds(15) };
+
+    private void FillDemo()
+    {
+        query = "8.8.8.8";
+        error = null;
+    }
+
+    private async Task Search()
+    {
+        error = null;
+        copied = "";
+        v6 = null;
+
+        var ip = (query ?? "").Trim();
+        if (ip.Length == 0)
+        {
+            await QuerySelf();
             return;
         }
 
+        if (!IPAddress.TryParse(ip, out _))
+        {
+            v4 = null;
+            error = $"“{ip}”不是合法的 IP 地址。";
+            return;
+        }
+
+        busy = true;
+        v4 = null;
+
         try
         {
-            btnDis = true;
-            rContentv4 =@<p>Running...</p>;
-            rContentv6 =@<p></p>;
-            StateHasChanged();
-            System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
-            var ip4 = await client.GetFromJsonAsync<ip_root>("https://ip4.ljjl.net/?ip=" + ip_address);
-            if (ip4 == null)
-                rContentv4 =@<p>Failed</p>;
-            else
+            using var client = NewClient();
+            var res = await client.GetFromJsonAsync<ip_root>("https://ip4.ljjl.net/?ip=" + Uri.EscapeDataString(ip));
+            v4 = ToRows(res);
+            if (v4.Count == 0)
             {
-                rContentv4 = __builder =>
-                {
-                    <p>IP: @ip4.IP.IP</p>
-                    <p>Continent: @ip4.IP.Continent</p>
-                    <p>Country: @ip4.IP.Country</p>
-                    <p>Region: @ip4.IP.Region</p>
-                    <p>City: @ip4.IP.City</p>
-                };
+                v4 = null;
+                error = "接口没有返回可解析的数据（可能是限流或返回格式变化）。";
             }
+        }
+        catch (Exception ex)
+        {
+            v4 = null;
+            error = "查询失败：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task QuerySelf()
+    {
+        error = null;
+        copied = "";
+        busy = true;
+        v4 = null;
+        v6 = null;
+
+        try
+        {
+            using var client = NewClient();
+
+            try
+            {
+                var a = await client.GetFromJsonAsync<ip_root>("https://ip4.ljjl.net");
+                v4 = ToRows(a);
+            }
+            catch (Exception ex)
+            {
+                v4 = new List<Kv> { new("错误", ex.Message) };
+            }
+
+            try
+            {
+                var b = await client.GetFromJsonAsync<ip_root>("https://ip6.ljjl.net");
+                v6 = ToRows(b);
+                if (v6.Count == 0)
+                {
+                    v6 = new List<Kv> { new("IPv6", "当前网络没有可用的 IPv6 出口") };
+                }
+            }
+            catch (Exception ex)
+            {
+                v6 = new List<Kv> { new("IPv6", "不可用：" + ex.Message) };
+            }
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = "v4";
         }
         catch
         {
-            rContentv4 =@<p>Failed</p>;
+            copied = "";
         }
-
-        btnDis = false;
-        StateHasChanged();
     }
-    async Task btnClick(EventArgs e)
+
+    private async Task Copy2(string value)
     {
-        btnDis = true;
-        rContentv4 =@<p>Running...</p>;
-        rContentv6 = @<p>Running...</p>;
-        StateHasChanged();
         try
         {
-            System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
-            var ip4 = await client.GetFromJsonAsync<ip_root>("https://ip4.ljjl.net");
-            var ip6 = await client.GetFromJsonAsync<ip_root>("https://ip6.ljjl.net");
-
-
-            if (ip4 == null)
-                rContentv4 =@<p>Failed</p>;
-            else
-            {
-                rContentv4 = __builder =>
-                {
-                    <p>IP: @ip4.IP.IP</p>
-                    <p>Continent: @ip4.IP.Continent</p>
-                    <p>Country: @ip4.IP.Country</p>
-                    <p>Region: @ip4.IP.Region</p>
-                    <p>UA: @ip4.Headers.user_agent</p>
-                };
-            }
-            if (ip6 == null)
-                rContentv6 = @<p>Failed</p>;
-            else
-            {
-                rContentv6 = __builder =>
-               {
-                   <p>IP: @ip6.IP.IP</p>
-                   <p>Continent: @ip6.IP.Continent</p>
-                   <p>Country: @ip6.IP.Country</p>
-                   <p>Region: @ip6.IP.Region</p>
-                   <p>UA: @ip6.Headers.user_agent</p>
-               };
-            }
-        }catch(Exception ex)
-        {
-            rContentv4 = (Microsoft.AspNetCore.Components.Rendering.RenderTreeBuilder __builder) =>
-            {
-                <p>@ex.Message</p>
-            }; 
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = "v6";
         }
-        btnDis = false;
-        StateHasChanged();
+        catch
+        {
+            copied = "";
+        }
     }
-  
+
     public class ip_root
     {
         public string Method { get; set; }
@@ -124,35 +303,24 @@
 
     public class ip_headers
     {
-
         public string accept { get; set; }
-        [JsonPropertyName("accept-encoding")]
-        public string accept_encoding { get; set; }
-        [JsonPropertyName("accept-language")]
-        public string accept_language { get; set; }
+        [JsonPropertyName("accept-encoding")] public string accept_encoding { get; set; }
+        [JsonPropertyName("accept-language")] public string accept_language { get; set; }
         public string connection { get; set; }
         public string dnt { get; set; }
         public string host { get; set; }
         public string priority { get; set; }
-        [JsonPropertyName("sec-fetch-dest")]
-        public string sec_fetch_dest { get; set; }
-        [JsonPropertyName("sec-fetch-mode")]
-        public string sec_fetch_mode { get; set; }
-        [JsonPropertyName("sec-fetch-site")]
-        public string sec_fetch_site { get; set; }
-        [JsonPropertyName("sec-fetch-user")]
-        public string sec_fetch_user { get; set; }
-        [JsonPropertyName("sec-gpc")]
-        public string sec_gpc { get; set; }
-        [JsonPropertyName("upgrade-insecure-requests")]
-        public string upgrade_insecure_requests { get; set; }
-        [JsonPropertyName("user-agent")]
-        public string user_agent { get; set; }
-        [JsonPropertyName("x-forwarded-proto")]
-        public string x_forwarded_proto { get; set; }
-        [JsonPropertyName("x-real-ip")]
-        public string x_real_ip { get; set; }
+        [JsonPropertyName("sec-fetch-dest")] public string sec_fetch_dest { get; set; }
+        [JsonPropertyName("sec-fetch-mode")] public string sec_fetch_mode { get; set; }
+        [JsonPropertyName("sec-fetch-site")] public string sec_fetch_site { get; set; }
+        [JsonPropertyName("sec-fetch-user")] public string sec_fetch_user { get; set; }
+        [JsonPropertyName("sec-gpc")] public string sec_fetch_gpc { get; set; }
+        [JsonPropertyName("upgrade-insecure-requests")] public string upgrade_insecure_requests { get; set; }
+        [JsonPropertyName("user-agent")] public string user_agent { get; set; }
+        [JsonPropertyName("x-forwarded-proto")] public string x_forwarded_proto { get; set; }
+        [JsonPropertyName("x-real-ip")] public string x_real_ip { get; set; }
     }
+
     public class ip_security
     {
         public int clientTcpRtt { get; set; }
@@ -160,6 +328,7 @@
         public string tlsVersion { get; set; }
         public string httpProtocol { get; set; }
     }
+
     public class ip_ip
     {
         public string IP { get; set; }
@@ -168,14 +337,9 @@
         public string Region { get; set; }
         public string RegionCode { get; set; }
         public string City { get; set; }
-        //public string Latitude { get; set; }
-        //public string Longitude { get; set; }
         public string Colo { get; set; }
         public int ASN { get; set; }
         public string ASOrganization { get; set; }
         public string Timezone { get; set; }
     }
-
-   
-
 }

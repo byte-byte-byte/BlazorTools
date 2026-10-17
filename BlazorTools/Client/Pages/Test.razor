@@ -1,86 +1,129 @@
 ﻿@page "/test"
-@using SixLabors.ImageSharp;
+@using SixLabors.ImageSharp
+@using SixLabors.ImageSharp.Processing
 @inject IJSRuntime JS
 
+<PageTitle>Test · BlazorTools</PageTitle>
+
 <h3>Test</h3>
-<InputFile @ref="@inputFile" OnChange="@LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp" />
-<div class="input-group mb-3">
-    <input @bind-value="@convertResult" type="text" class="form-control" placeholder="img base64 data">
-    <button type="button" class="btn btn-primary" onclick="@btnClick">预览</button>
+
+<p class="page-note">
+    开发用的调试页：把不超过 255×255 的图片直接封成单帧 <code>.ico</code>（不缩放），用来验证 ICO 头是否正确。
+    正式请用「<a href="imgtoicon">Img转Icon</a>」。
+</p>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">选择图片</span>
+        <span class="panel-sub">原图边长必须 ≤ 255 px</span>
+    </div>
+
+    <div class="file-pick">
+        <InputFile OnChange="LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp" />
+        @if (busy)
+        {
+            <span class="spin">转换中</span>
+        }
+    </div>
 </div>
-<img  src="@convertResult" />
-@if (!string.IsNullOrEmpty(convertResult))
+
+@if (error is not null)
 {
-    <br />
-    <a download="file.ico" href="@convertResult">Download</a>
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(dataUri))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">ICO 预览</span>
+            <span class="panel-sub">@outW × @outH px</span>
+            <span class="panel-tools">
+                <a class="chip-btn" href="@dataUri" download="file.ico">下载 .ico</a>
+            </span>
+        </div>
+
+        <div class="preview-box">
+            <img src="@dataUri" alt="ico" />
+        </div>
+
+        <div class="stat-strip">
+            <span class="stat-chip">尺寸 <b>@outW × @outH</b></span>
+            <span class="stat-chip">ICO <b>@icoSize</b> 字节</span>
+        </div>
+    </div>
 }
 
 @code {
+    private string dataUri = "";
+    private int outW, outH;
+    private long icoSize;
+    private bool busy = false;
+    private string? error = null;
 
-    async Task btnClick(EventArgs e)
-    {
-        StateHasChanged();
-    }
-
-
-    private InputFile? inputFile;
-    private List<IBrowserFile> loadedFiles = new();
-    private bool isLoading;
-    private string convertResult { get; set; } = "";
-    private int maxAllowedFiles = 3;
     private async Task LoadFiles(InputFileChangeEventArgs e)
     {
-        isLoading = true;
-        loadedFiles.Clear();
+        error = null;
+        busy = true;
+        dataUri = "";
 
-        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        try
         {
-            try
+            var file = e.File;
+            if (!file.ContentType.StartsWith("image", StringComparison.OrdinalIgnoreCase))
             {
-                if (file.ContentType.IndexOf("image") >= 0)
-                {
-                    var stream = file.OpenReadStream();
-                    var ext = System.IO.Path.GetExtension(file.Name).Substring(1);
-                    byte[] buf = new byte[stream.Length];
-                    await stream.ReadAsync(buf);
-                    //convertResult ="data:image/"+ext+";base64,"+ Convert.ToBase64String(buf);
+                error = $"“{file.Name}”不是图片。";
+                return;
+            }
 
-                    Image profileImage = Image.Load(buf);
-                    if (profileImage!=null)
-                    {
-                        if (profileImage.Width > 255 || profileImage.Height > 255)
-                            return;
-                        MemoryStream memory = new MemoryStream();  
-                        profileImage.SaveAsPng(memory);
-                        memory.Position = 0;
-                        MemoryStream iconStream = new MemoryStream();
-                        BinaryWriter iconWritter = new BinaryWriter(iconStream);
-                        iconWritter.Write((short)0);
-                        iconWritter.Write((short)1);
-                        iconWritter.Write((short)1);
-                        iconWritter.Write((byte)profileImage.Width);
-                        iconWritter.Write((byte)profileImage.Height);
-                        iconWritter.Write((short)0);
-                        iconWritter.Write((short)0);
-                        iconWritter.Write((short)32);
-                        iconWritter.Write((int)memory.Length);
-                        iconWritter.Write(22);
-                        iconWritter.Write(memory.GetBuffer(), 0, (int)memory.Length);
-                        iconWritter.Flush();
-                        iconStream.Position = 0;
-                        byte[] buf1 = new byte[iconStream.Length];
-                        await iconStream.ReadAsync(buf1);
-                        convertResult = "data:image/icon;base64," + Convert.ToBase64String(buf1);
-                    }                   
-                }
-                loadedFiles.Add(file);
-            }
-            catch (Exception ex)
+            await using var stream = file.OpenReadStream(16L * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            using var image = Image.Load(ms.ToArray());
+            if (image.Width > 255 || image.Height > 255)
             {
-                Console.WriteLine(ex.Message);
+                // 调试页刻意不缩放：边长超过 255 时 ICO 头的宽/高字节会溢出，直接报错而非静默产出坏文件
+                error = $"原图 {image.Width}×{image.Height} 超过 255×255，本页不做缩放。";
+                return;
             }
+
+            outW = image.Width;
+            outH = image.Height;
+
+            using var memory = new MemoryStream();
+            image.SaveAsPng(memory);
+
+            using var iconStream = new MemoryStream();
+            using var iconWriter = new BinaryWriter(iconStream, System.Text.Encoding.UTF8, leaveOpen: true);
+            iconWriter.Write((short)0);
+            iconWriter.Write((short)1);
+            iconWriter.Write((short)1);
+            iconWriter.Write((byte)image.Width);
+            iconWriter.Write((byte)image.Height);
+            iconWriter.Write((short)0);
+            iconWriter.Write((short)0);
+            iconWriter.Write((short)32);
+            iconWriter.Write((int)memory.Length);
+            iconWriter.Write(22);
+            iconWriter.Write(memory.GetBuffer(), 0, (int)memory.Length);
+            iconWriter.Flush();
+            iconStream.Position = 0;
+
+            var buf = iconStream.ToArray();
+            icoSize = buf.Length;
+            dataUri = "data:image/icon;base64," + Convert.ToBase64String(buf);
         }
-
-        isLoading = false;
+        catch (Exception ex)
+        {
+            error = "转换失败：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
     }
 }

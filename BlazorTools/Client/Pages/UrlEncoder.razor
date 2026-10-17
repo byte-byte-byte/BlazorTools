@@ -1,29 +1,151 @@
 ﻿@page "/urlencoder"
-<h3>Url编码/解码</h3>
-<div>
-    <label>编码:</label><br />
-    <textarea style="width:100%;" @bind="@tEncodeStr"></textarea>
-</div>
-<div>
-    <label>解码:</label><br />
-    <textarea style="width:100%;" @bind="@tDecodeStr"></textarea>
-</div>
-<div>
-    <button class="btn btn-light" onclick="@btnEClick">编码</button>
-    <button class="btn btn-light" onclick="@btnDClick">解码</button>
+@inject IJSRuntime JS
+
+<PageTitle>Url 编码/解码 · BlazorTools</PageTitle>
+
+<h3>Url 编码/解码</h3>
+
+<p class="page-note">
+    URL 百分号编码（Percent-Encoding）。中文等非 ASCII 字符按 <code>UTF-8</code> 逐字节转义成 <code>%XX</code>；
+    空格会被编成 <code>+</code>，解码时 <code>+</code> 与 <code>%20</code> 都能还原成空格。
+</p>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">编解码器</span>
+        <span class="panel-sub">两侧可互换</span>
+        <span class="panel-tools">
+            <button type="button" class="chip-btn" @onclick="Swap" title="把右侧结果搬到左侧">交换两侧</button>
+        </span>
+    </div>
+
+    <div class="io-pair">
+        <div class="pane">
+            <div class="pane-head">
+                <span class="pane-title">原文 Plain</span>
+                <span class="pane-tools">
+                    <button type="button" class="copy-btn" title="复制原文" aria-label="复制原文"
+                            @onclick='async () => await Copy(plain, "plain")'>@Mark("plain")</button>
+                </span>
+            </div>
+            <div class="pane-body">
+                <textarea placeholder="例如 https://example.com/p?q=中文 值"
+                          @bind="plain" @bind:event="oninput"></textarea>
+            </div>
+        </div>
+
+        <div class="io-arrow" aria-hidden="true">⇄</div>
+
+        <div class="pane">
+            <div class="pane-head">
+                <span class="pane-title">编码后 Encoded</span>
+                <span class="pane-tools">
+                    <button type="button" class="copy-btn" title="复制编码结果" aria-label="复制编码结果"
+                            @onclick='async () => await Copy(encoded, "encoded")'>@Mark("encoded")</button>
+                </span>
+            </div>
+            <div class="pane-body">
+                <textarea placeholder="例如 https%3A%2F%2Fexample.com%2Fp%3Fq%3D%E4%B8%AD%E6%96%87"
+                          @bind="encoded" @bind:event="oninput"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="Encode">编码 →</button>
+        <button type="button" class="btn" @onclick="Decode">← 解码</button>
+        <button type="button" class="btn" @onclick="Clear">清空</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip">原文 <b>@Len(plain)</b> 字符</span>
+        <span class="stat-chip">编码后 <b>@Len(encoded)</b> 字符</span>
+        <span class="stat-chip">膨胀 <b>@Inflate</b></span>
+    </div>
 </div>
 
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
 @code {
-    string tEncodeStr{ get; set; }
-    string tDecodeStr { get; set; }
-    async Task btnEClick(EventArgs e)
+    private string plain = "";
+    private string encoded = "";
+    private string? error = null;
+    private string copied = "";
+
+    private string Mark(string key) => copied == key ? "✓" : "⧉";
+
+    private static int Len(string? s) => s?.Length ?? 0;
+
+    private string Inflate
     {
-        tDecodeStr = System.Web.HttpUtility.UrlEncode(tEncodeStr);
-        StateHasChanged();
+        get
+        {
+            int p = Len(plain);
+            if (p == 0) return "—";
+            return (Len(encoded) / (double)p).ToString("0.00") + "×";
+        }
     }
-    async Task btnDClick(EventArgs e)
+
+    private void Encode()
     {
-        tEncodeStr = System.Web.HttpUtility.UrlDecode(tDecodeStr);
-        StateHasChanged();
+        Reset();
+        if (plain.Length == 0)
+        {
+            error = "左侧原文为空，没有可编码的内容。";
+            return;
+        }
+
+        encoded = System.Web.HttpUtility.UrlEncode(plain) ?? "";
+    }
+
+    private void Decode()
+    {
+        Reset();
+        if (encoded.Length == 0)
+        {
+            error = "右侧为空，没有可解码的内容。";
+            return;
+        }
+
+        plain = System.Web.HttpUtility.UrlDecode(encoded) ?? "";
+    }
+
+    private void Swap()
+    {
+        Reset();
+        (plain, encoded) = (encoded, plain);
+    }
+
+    private void Clear()
+    {
+        plain = "";
+        encoded = "";
+        Reset();
+    }
+
+    private void Reset()
+    {
+        error = null;
+        copied = "";
+    }
+
+    private async Task Copy(string value, string key)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = key;
+        }
+        catch
+        {
+            // 非安全上下文 / 无剪贴板权限时静默降级，不影响页面其它功能
+            copied = "";
+        }
     }
 }

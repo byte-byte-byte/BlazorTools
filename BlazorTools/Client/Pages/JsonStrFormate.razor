@@ -2,46 +2,149 @@
 @using System.Text.Json
 @using System.Text.Encodings.Web
 @using System.Text.Unicode
-<h3>Json字符串格式化</h3>
+@inject IJSRuntime JS
 
+<PageTitle>Json 格式化 · BlazorTools</PageTitle>
 
-<div>
-    <p>
-        <button type="button" class="btn btn-primary" onclick="@btnClick1">压缩</button>
-        <button type="button" class="btn btn-primary" onclick="@btnClick">格式化</button>
-    </p>
-    
-    <p>
-        <textarea id="resCalc" style="width:100%; height:500px;" @bind="@textResult"></textarea>
-    </p>
-    
+<h3>Json 格式化</h3>
+
+<p class="page-note">
+    美化 / 压缩 JSON 字符串。默认保留中文等字符原样输出（不做 <code>\uXXXX</code> 转义），
+    需要放进某些只吃 ASCII 的场景时可切到「转义 Unicode」。
+</p>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">Json 编辑器</span>
+        <span class="panel-sub">结果就地回填</span>
+        <span class="panel-tools">
+            <button type="button" class="copy-btn" title="复制 JSON" aria-label="复制 JSON"
+                    @onclick='async () => await Copy(text, "json")'>@(copied == "json" ? "✓" : "⧉")</button>
+        </span>
+    </div>
+
+    <textarea id="resCalc" class="v-json"
+              placeholder='例如 {"name":"BlazorTools","ok":true,"n":18}'
+              @bind="text" @bind:event="oninput"></textarea>
+
+    <div class="chip-row">
+        <span class="chip-row-label">非 ASCII</span>
+        <button type="button" class="chip-btn @(escapeUnicode ? null : "is-on")"
+                title="中文等字符原样输出"
+                @onclick='() => SetEscape(false)'>保留原文</button>
+        <button type="button" class="chip-btn @(escapeUnicode ? "is-on" : null)"
+                title="中文转成 \uXXXX"
+                @onclick='() => SetEscape(true)'>转义 Unicode</button>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick='() => Format(true)'>美化</button>
+        <button type="button" class="btn" @onclick='() => Format(false)'>压缩</button>
+        <button type="button" class="btn" @onclick="Demo">填入示例</button>
+        <button type="button" class="btn" @onclick="Clear">清空</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip"><b>@Len(text)</b> 字符</span>
+        <span class="stat-chip"><b>@Lines(text)</b> 行</span>
+        <span class="stat-chip">UTF-8 <b>@Bytes(text)</b> 字节</span>
+    </div>
 </div>
 
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
 @code {
-    //string inputStr = "";
-    string textResult = "";
-    async Task btnClick(EventArgs e)
+    private string text = "";
+    private bool escapeUnicode = false;
+    private string? error = null;
+    private string copied = "";
+
+    private static int Len(string? s) => s?.Length ?? 0;
+
+    private static int Lines(string? s)
     {
-        var jsonDocument = JsonDocument.Parse(textResult);
-        textResult = JsonSerializer.Serialize(jsonDocument, new JsonSerializerOptions()
+        if (string.IsNullOrEmpty(s)) return 0;
+        int n = 1;
+        foreach (var c in s)
         {
-            // 整齐打印
-            WriteIndented = true,
-            //重新编码，解决中文乱码问题
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-        });
-        StateHasChanged();
+            if (c == '\n') n++;
+        }
+        return n;
     }
-    async Task btnClick1(EventArgs e)
+
+    private static int Bytes(string? s) =>
+        string.IsNullOrEmpty(s) ? 0 : System.Text.Encoding.UTF8.GetByteCount(s);
+
+    private JsonSerializerOptions Opts() => new()
     {
-        var jsonDocument = JsonDocument.Parse(textResult);
-        textResult = JsonSerializer.Serialize(jsonDocument, new JsonSerializerOptions()
-            {
-                // 整齐打印
-                WriteIndented = false,
-                //重新编码，解决中文乱码问题
-                Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-            });
-        StateHasChanged();
+        WriteIndented = true,
+        // JavaScriptEncoder.Create(UnicodeRanges.All) → 不转义中文；用默认则转义成 \uXXXX
+        Encoder = escapeUnicode ? null : JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
+
+    private void SetEscape(bool value)
+    {
+        escapeUnicode = value;
+        error = null;
+        copied = "";
+    }
+
+    private void Format(bool indented)
+    {
+        error = null;
+        copied = "";
+
+        var src = (text ?? "").Trim();
+        if (src.Length == 0)
+        {
+            error = "内容为空，没有可处理的 JSON。";
+            return;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(src);
+            var opts = Opts();
+            opts.WriteIndented = indented;
+            text = JsonSerializer.Serialize(doc, opts);
+        }
+        catch (JsonException ex)
+        {
+            error = "JSON 解析失败：" + ex.Message;
+        }
+    }
+
+    private void Demo()
+    {
+        text = "{\"name\":\"BlazorTools\",\"desc\":\"纯本地工具箱\",\"count\":18,\"local\":true,\"tags\":[\"json\",\"base64\",\"crc\"]}";
+        error = null;
+        copied = "";
+        Format(true);
+    }
+
+    private void Clear()
+    {
+        text = "";
+        error = null;
+        copied = "";
+    }
+
+    private async Task Copy(string value, string key)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = key;
+        }
+        catch
+        {
+            copied = "";
+        }
     }
 }

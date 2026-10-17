@@ -1,12 +1,32 @@
 ﻿@page "/counter"
 
-<PageTitle>Counter</PageTitle>
+<PageTitle>Counter · BlazorTools</PageTitle>
 
-<h1>Counter</h1>
+<h3>Counter</h3>
 
-<p role="status">Current count: @currentCount</p>
+<p class="page-note">
+    Blazor 模板自带的示例页，用来验证事件绑定与增量渲染：每次点击只更新这一个计数节点，不会重建整页。
+</p>
 
-<button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">计数器 Count</span>
+        <span class="panel-sub">点一次 +1</span>
+    </div>
+
+    <div class="metric-grid is-single">
+        <div class="metric is-hi">
+            <div class="metric-k">Current count</div>
+            <div class="metric-v v-count">@currentCount</div>
+            <div class="metric-hint">状态保存在组件实例里，离开页面即重置</div>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="IncrementCount">Click me</button>
+        <button type="button" class="btn" @onclick="() => currentCount = 0">归零 Reset</button>
+    </div>
+</div>
 
 @code {
     private int currentCount = 0;

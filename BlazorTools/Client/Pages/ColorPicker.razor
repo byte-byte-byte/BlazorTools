@@ -2,23 +2,43 @@
 @inject IJSRuntime JS
 @implements IAsyncDisposable
 
-@colorPickerCss
-<h1>ColorPicker</h1>
-<input id="ipColorPick" type="text" value="#3606f5" data-coloris>
+<PageTitle>ColorPicker · BlazorTools</PageTitle>
 
-<br />
-<br />
-<h2 >常用的HTML颜色代码列表</h2>
-<table class="color-table">
-    <thead class="color-table-head">
-        <tr class="color-table-row">
-            <th class="color-table-cell color-table-cell-color">Color</th>
-            <th class="color-table-cell color-table-cell-name">Name</th>
-            <th class="color-table-cell color-table-cell-hex">Hex Code</th>
-            <th class="color-table-cell color-table-cell-rgb">RGB Code</th>
-        </tr>
-    </thead>
-    <tbody>
+@colorPickerCss
+
+<h3>ColorPicker</h3>
+
+<p class="page-note">
+    取色并转换色值格式：支持 <code>#RGB</code> / <code>#RRGGBB</code> / <code>rgb()</code> / <code>hsl()</code>
+    相互粘贴解析。下方是常用 HTML 颜色代码表，点色块可复制对应色值。全部在本地完成。
+</p>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">取色器</span>
+        <span class="panel-sub">点输入框打开面板</span>
+    </div>
+
+    <input id="ipColorPick" class="form-control" type="text" value="#3606f5" data-coloris />
+</div>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">常用 HTML 颜色代码</span>
+        <span class="panel-sub">HTML / CSS 具名色</span>
+    </div>
+
+    <div class="table-scroll">
+        <table class="color-table">
+            <thead class="color-table-head">
+                <tr class="color-table-row">
+                    <th class="color-table-cell color-table-cell-color">Color</th>
+                    <th class="color-table-cell color-table-cell-name">Name</th>
+                    <th class="color-table-cell color-table-cell-hex">Hex Code</th>
+                    <th class="color-table-cell color-table-cell-rgb">RGB Code</th>
+                </tr>
+            </thead>
+            <tbody>
         <tr class="color-table-row">
             <td class="color-table-cell color-table-cell-color">
                 <div class="color-table-color " style="background-color: #FFFFFF;" data-hex="#FFFFFF" data-rgb="rgb(255, 255, 255)" data-hsl="hsl(0, 0%, 100%)"></div>
@@ -147,10 +167,12 @@
             <td class="color-table-cell color-table-cell-hex">#800080</td>
             <td class="color-table-cell color-table-cell-rgb">rgb(128, 0, 128)</td>
         </tr>
-    </tbody>
-</table>
+            </tbody>
+        </table>
+    </div>
+</div>
 
-<br />
+
 @code {
     RenderFragment? colorPickerCss{ get; set; }
     protected override async Task OnAfterRenderAsync(bool firstRender)

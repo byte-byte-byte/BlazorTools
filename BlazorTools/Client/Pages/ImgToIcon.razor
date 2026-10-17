@@ -1,94 +1,269 @@
 ﻿@page "/imgtoicon"
-@using SixLabors.ImageSharp;
+@using SixLabors.ImageSharp
 @using SixLabors.ImageSharp.Processing
+@using SixLabors.ImageSharp.Formats.Png
+@inject IJSRuntime JS
+
+<PageTitle>Img 转 Icon · BlazorTools</PageTitle>
+
 <h3>Img转Icon</h3>
 
-<InputFile @ref="@inputFile" OnChange="@LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp" />
-<div class="input-group mb-3">
-    <input @bind-value="@convertResult" type="text" class="form-control" placeholder="img base64 data">
-    <button type="button" class="btn btn-primary" onclick="@btnClick">预览</button>
+<p class="page-note">
+    把图片转成单尺寸 <code>.ico</code> 图标（32 bpp 带透明通道的 PNG 内嵌格式）。
+    先等比缩放到目标边长上限，再封 22 字节图标头。转换全程在本地完成，图片不会上传。
+</p>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">选择图片</span>
+        <span class="panel-sub">单次最大 @(MaxBytes / 1024 / 1024) MB</span>
+    </div>
+
+    <div class="file-pick">
+        <InputFile OnChange="LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp,image/webp" />
+        @if (busy)
+        {
+            <span class="spin">转换中</span>
+        }
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">目标边长</span>
+        @foreach (var size in Sizes)
+        {
+            <button type="button" class="chip-btn @(targetSize == size ? "is-on" : null)"
+                    title="等比缩放到最长边 @size px"
+                    @onclick="() => SetSize(size)">@size px</button>
+        }
+    </div>
 </div>
-<img src="@convertResult" />
-@if (!string.IsNullOrEmpty(convertResult))
+
+@if (error is not null)
 {
-    <br />
-    <a download="file.ico" href="@convertResult">Download</a>
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
 }
-<font color="red">@covertAlert</font>
+
+@if (!string.IsNullOrEmpty(dataUri))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">图标预览 ICO</span>
+            <span class="panel-sub">@outW × @outH px</span>
+            <span class="panel-tools">
+                <a class="chip-btn" href="@dataUri" download="@icoName" title="下载 .ico">下载 .ico</a>
+            </span>
+        </div>
+
+        <div class="preview-box">
+            <img src="@dataUri" alt="@icoName" />
+        </div>
+
+        <div class="stat-strip">
+            <span class="stat-chip">原图 <b>@origW × @origH</b></span>
+            <span class="stat-chip">输出 <b>@outW × @outH</b></span>
+            <span class="stat-chip">原始文件 <b>@Kb(fileSize)</b></span>
+            <span class="stat-chip">ICO <b>@Kb(icoSize)</b></span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Data URI</span>
+            <span class="panel-tools">
+                <button type="button" class="copy-btn" title="复制 Data URI" aria-label="复制 Data URI"
+                        @onclick='async () => await Copy(dataUri)'>@(copied ? "✓" : "⧉")</button>
+            </span>
+        </div>
+
+        <div class="out-box v-uri">@dataUri</div>
+
+        <div class="btn-row">
+            <button type="button" class="btn btn-primary" @onclick='async () => await Copy(dataUri)'>复制 Data URI</button>
+            <a class="btn btn-primary" href="@dataUri" download="@icoName">下载 .ico</a>
+            <button type="button" class="btn" @onclick="Clear">清空</button>
+        </div>
+    </div>
+}
+else if (!busy)
+{
+    <div class="alert-box is-info">
+        <span class="alert-box-ico" aria-hidden="true">i</span>
+        <span>ICO 单帧只支持一个尺寸，建议源图用正方形 PNG，透明区域会以 32 bpp 的 alpha 通道保留。</span>
+    </div>
+}
 
 @code {
+    private const long MaxBytes = 16L * 1024 * 1024;
 
-    async Task btnClick(EventArgs e)
-    {
-        StateHasChanged();
-    }
+    private static readonly int[] Sizes = { 16, 32, 48, 64, 128, 256 };
 
-    string covertAlert = "";
-    private InputFile? inputFile;
-    private List<IBrowserFile> loadedFiles = new();
-    private bool isLoading;
-    private string convertResult { get; set; } = "";
-    private int maxAllowedFiles = 3;
+    private string dataUri = "";
+    private string icoName = "file.ico";
+    private int targetSize = 64;
+    private int origW, origH, outW, outH;
+    private long fileSize, icoSize;
+    private bool busy = false;
+    private bool copied = false;
+    private string? error = null;
+
+    /// <summary>原始上传字节，换尺寸时始终从这里重新解码，避免反复重采样糊掉。</summary>
+    private byte[]? sourceBytes;
+
+    private static string Kb(long bytes) =>
+        bytes >= 1024 * 1024 ? (bytes / 1024.0 / 1024).ToString("0.00") + " MB"
+                             : (bytes / 1024.0).ToString("0.0") + " KB";
+
     private async Task LoadFiles(InputFileChangeEventArgs e)
     {
-        isLoading = true;
-        loadedFiles.Clear();
+        error = null;
+        copied = false;
+        busy = true;
 
-        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        try
         {
-            try
+            var file = e.File;
+            if (file.Size > MaxBytes)
             {
-                if (file.ContentType.IndexOf("image") >= 0)
-                {
-                    var stream = file.OpenReadStream();
-                    var ext = System.IO.Path.GetExtension(file.Name).Substring(1);
-                    byte[] buf = new byte[stream.Length];
-                    await stream.ReadAsync(buf);
-                    //convertResult ="data:image/"+ext+";base64,"+ Convert.ToBase64String(buf);
+                error = $"文件太大：{Kb(file.Size)}，超过上限 {Kb(MaxBytes)}。";
+                ClearCore();
+                return;
+            }
 
-                    Image profileImage = Image.Load(buf);
-                    if (profileImage != null)
-                    {
-                        if (profileImage.Width > 255 || profileImage.Height > 255)
-                        {
-                            int maxVal = profileImage.Width > profileImage.Height ? profileImage.Width : profileImage.Height;
-                            var k = (int)(maxVal / 255.0 + 0.5);
-                            int width = profileImage.Width / k;
-                            int height = profileImage.Height / k;
-                            profileImage.Mutate(x => x.Resize(width, height));        
-                        }
-                        covertAlert = "";
-                        MemoryStream memory = new MemoryStream();
-                        profileImage.SaveAsPng(memory);
-                        memory.Position = 0;
-                        MemoryStream iconStream = new MemoryStream();
-                        BinaryWriter iconWritter = new BinaryWriter(iconStream);
-                        iconWritter.Write((short)0);
-                        iconWritter.Write((short)1);
-                        iconWritter.Write((short)1);
-                        iconWritter.Write((byte)profileImage.Width);
-                        iconWritter.Write((byte)profileImage.Height);
-                        iconWritter.Write((short)0);
-                        iconWritter.Write((short)0);
-                        iconWritter.Write((short)32);
-                        iconWritter.Write((int)memory.Length);
-                        iconWritter.Write(22);
-                        iconWritter.Write(memory.GetBuffer(), 0, (int)memory.Length);
-                        iconWritter.Flush();
-                        iconStream.Position = 0;
-                        byte[] buf1 = new byte[iconStream.Length];
-                        await iconStream.ReadAsync(buf1);
-                        convertResult = "data:image/icon;base64," + Convert.ToBase64String(buf1);
-                    }
-                }
-                loadedFiles.Add(file);
-            }
-            catch (Exception ex)
+            if (!file.ContentType.StartsWith("image", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine(ex.Message);
+                error = $"“{file.Name}”不是图片（ContentType = {file.ContentType}）。";
+                ClearCore();
+                return;
             }
+
+            await using var stream = file.OpenReadStream(MaxBytes);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            fileSize = file.Size;
+            sourceBytes = ms.ToArray();
+            icoName = Path.GetFileNameWithoutExtension(file.Name) + ".ico";
+
+            using var probe = Image.Load(sourceBytes);
+            origW = probe.Width;
+            origH = probe.Height;
+        }
+        catch (Exception ex)
+        {
+            error = "读取失败：" + ex.Message;
+            ClearCore();
+        }
+        finally
+        {
+            busy = false;
         }
 
-        isLoading = false;
+        // 先把异步的 await 收完，再走同步的图像管线，避免线程切换造成的时序混乱
+        Render();
+    }
+
+    private async Task SetSize(int size)
+    {
+        targetSize = size;
+        error = null;
+        copied = false;
+        Render();
+        await Task.CompletedTask;
+    }
+
+    private void Render()
+    {
+        if (sourceBytes is null || sourceBytes.Length == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var image = Image.Load(sourceBytes);
+
+            // 等比缩放到目标边长：ICO 单帧的最大边长是 256
+            image.Mutate(x => x.Resize(new ResizeOptions
+            {
+                Size = new Size(targetSize, targetSize),
+                Mode = ResizeMode.Max,
+                Sampler = KnownResamplers.Lanczos3,
+            }));
+            outW = image.Width;
+            outH = image.Height;
+
+            using var encoded = new MemoryStream();
+            image.SaveAsPng(encoded);
+
+            var png = encoded.ToArray();
+            var ico = BuildIco(png, outW, outH);
+
+            icoSize = ico.Length;
+            dataUri = "data:image/icon;base64," + Convert.ToBase64String(ico);
+        }
+        catch (Exception ex)
+        {
+            error = "转换失败：" + ex.Message;
+        }
+    }
+
+    /// <summary>
+    /// 手工拼 ICONDIR + ICONDIRENTRY + PNG 数据。
+    /// 之所以自己拼：单帧 32bpp 的 PNG 型图标在现代系统上是标准做法，不必额外引入图标编码器。
+    /// </summary>
+    private static byte[] BuildIco(byte[] png, int width, int height)
+    {
+        using var ms = new MemoryStream();
+        using var w = new BinaryWriter(ms, System.Text.Encoding.UTF8, leaveOpen: true);
+
+        // ICONDIR：reserved(2) + type(2=icon) + count(2)
+        w.Write((short)0);
+        w.Write((short)1);
+        w.Write((short)1);
+
+        // ICONDIRENTRY(16B)：宽 / 高写 0 才代表 256
+        w.Write((byte)(width >= 256 ? 0 : width));
+        w.Write((byte)(height >= 256 ? 0 : height));
+        w.Write((byte)0);            // 调色板色数，真彩色为 0
+        w.Write((byte)0);            // reserved
+        w.Write((short)1);           // 色平面
+        w.Write((short)32);          // 位深
+        w.Write((int)png.Length);    // 数据长度
+        w.Write(22);                 // 数据偏移 = ICONDIR(6) + ENTRY(16)
+        w.Write(png, 0, png.Length);
+        w.Flush();
+
+        return ms.ToArray();
+    }
+
+    private void ClearCore()
+    {
+        dataUri = "";
+        sourceBytes = null;
+        origW = origH = outW = outH = 0;
+        fileSize = icoSize = 0;
+    }
+
+    private void Clear()
+    {
+        ClearCore();
+        error = null;
+        copied = false;
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = true;
+        }
+        catch
+        {
+            copied = false;
+        }
     }
 }

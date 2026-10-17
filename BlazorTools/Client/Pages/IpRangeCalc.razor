@@ -83,7 +83,7 @@
                         class="copy-btn @(copied == row.V ? "is-done" : null)"
                         title="复制 @row.K"
                         aria-label="复制 @row.K"
-                        @onclick="() => Copy(row.V)">@(copied == row.V ? "✓" : "⧉")</button>
+                        @onclick="async () => await Copy(row.V)">@(copied == row.V ? "✓" : "⧉")</button>
             </div>
         }
     </div>

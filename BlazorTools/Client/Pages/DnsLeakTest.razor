@@ -1,85 +1,278 @@
 ﻿@page "/dnsleak"
 @using System.Text.Json.Serialization
-@using System.Text.Json
-@using System.Collections.Generic
-<h3>DNS泄露测试</h3>
-<br />
-<button class="btn btn-primary" onclick="@btnClick" disabled="@btnDis">测试</button>
-<hr />
-<div class="row">
-    <div class="col-md-4">
-        @rContent1
-    </div>
-    <div class="col-md-4">
-        @rContent2
-    </div>
-    <div class="col-md-4">
-        @rContent3
-    </div>
-</div>
-@code {
-    bool btnDis = false;
-    RenderFragment? rContent1 { get; set; }
-    RenderFragment? rContent2 { get; set; }
-    RenderFragment? rContent3 { get; set; }
-    async Task btnClick(EventArgs e)
-    {
-        btnDis = true;
-        rContent1 =@<p>Running...</p>;
-        rContent2 =@<p>Running...</p>;
-        rContent3 =@<p>Running...</p>;
-        StateHasChanged();
+@using System.Net.Http.Json
+@inject IJSRuntime JS
 
-        string[] urls = new[]
-        {
-            "https://edns.ip-api.com/json",
-            "https://www.ipv4.surfsharkdns.com",
-            "https://ipv6.surfsharkdns.com",
-        };
-        System.Net.Http.HttpClient client = new System.Net.Http.HttpClient();
-        try
-        {
-            var tsk1 = await client.GetFromJsonAsync<ip_api_dns>(urls[0]);
-            if (tsk1 != null)
-                rContent1 =@<p>@tsk1.dns.ip<br />@tsk1.dns.geo</p>;
-        }
-        catch (Exception ex)
-        {
-            rContent1 =@<p>@ex.Message</p>;
-        }
-        try
-        {
-            var tsk2 = await client.GetFromJsonAsync<Dictionary<string, surfshardDns>>(urls[1]);
-            if (tsk2 != null && tsk2.Count > 0)
-                rContent2 =@<p>@tsk2.FirstOrDefault().Value.IP<br />@tsk2.FirstOrDefault().Value.ISP<br />@tsk2.FirstOrDefault().Value.City</p>;
-        }
-        catch (Exception ex)
-        {
-            rContent2 =@<p>@ex.Message</p>;
-        }
-        try
-        {
-            var tsk3 = await client.GetFromJsonAsync<Dictionary<string, surfshardDns>>(urls[2]);
-            if (tsk3 != null && tsk3.Count > 0)
-                rContent3 =@<p>@tsk3.FirstOrDefault().Value.IP<br />@tsk3.FirstOrDefault().Value.ISP<br />@tsk3.FirstOrDefault().Value.City</p>;
-        }catch(Exception ex)
-        {
-            rContent3 =@<p>@ex.Message</p>;
-        }
-        btnDis = false;
-        StateHasChanged();
+<PageTitle>DNS 泄露测试 · BlazorTools</PageTitle>
+
+<h3>DNS泄露测试</h3>
+
+<p class="page-note">
+    检测你的 DNS 请求实际走了哪家解析服务。三个来源会各自返回它看到的出口 IP 与运营商，
+    <b>如果显示的运营商和你实际的宽带运营商不一致，就说明 DNS 被接管 / 泄露了</b>；
+    同一台机器上三个来源返回的 IP 不一致，通常意味着走了代理或分流。
+</p>
+
+<div class="alert-box is-warn">
+    <span class="alert-box-ico" aria-hidden="true">!</span>
+    <span>
+        本工具<b>需要联网</b>：会向 <code>edns.ip-api.com</code>、<code>ipv4/ipv6.surfsharkdns.com</code>
+        发起请求。让第三方看到你的出口 IP 正是这项检测的原理，这三个站点都会记录到你的 IP。
+    </span>
+</div>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">开始测试</span>
+        <span class="panel-sub">三个来源并发请求</span>
+    </div>
+
+    <div class="btn-row is-flush">
+        <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Run">
+            @(busy ? "检测中…" : "开始检测")
+        </button>
+        <button type="button" class="btn" disabled="@busy" @onclick="Clear">清空结果</button>
+    </div>
+
+    @if (busy)
+    {
+        <div class="stat-strip"><span class="spin">正在向三个解析服务发起请求</span></div>
     }
-   
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (cards.Count > 0)
+{
+    <div class="metric-grid">
+        @foreach (var card in cards)
+        {
+            <div class="metric @(card.Hi ? "is-hi" : null)">
+                <div class="metric-k">@card.Name</div>
+                <div class="metric-v v-ip @(card.Ok ? null : "is-fail")">@card.Ip</div>
+                <div class="metric-hint">@card.Hint</div>
+                @if (card.Ok)
+                {
+                    <button type="button"
+                            class="copy-btn @(copied == card.Ip ? "is-done" : null)"
+                            title="复制 @card.Name 的结果"
+                            aria-label="复制 @card.Name 的结果"
+                            @onclick="async () => await Copy(card.Ip)">@(copied == card.Ip ? "✓" : "⧉")</button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (DistinctIps > 1)
+    {
+        <div class="alert-box is-warn">
+            <span class="alert-box-ico" aria-hidden="true">!</span>
+            <span>
+                三个来源返回了 <b>@DistinctIps</b> 个互不相同的出口 IP，DNS 可能存在分流或代理接管，建议关掉 VPN 后重测一次做对比。
+            </span>
+        </div>
+    }
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">明细 Details</span>
+            <span class="panel-sub">接口原始字段</span>
+        </div>
+        <div class="kv-list">
+            @foreach (var row in Detail)
+            {
+                <div class="kv-item">
+                    <span class="kv-k">@row.K</span>
+                    <span class="kv-v @row.Css">@row.V</span>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private sealed record Card(string Name, string Ip, string Hint, bool Hi, bool Ok);
+
+    private sealed record Row(string K, string V, string? Css = null);
+
+    private sealed record Res<T>(T? Value, string? Error);
+
+    private List<Card> cards = new();
+    private bool busy = false;
+    private string? error = null;
+    private string copied = "";
+
+    // 三个来源的原始响应，明细区直接读它们
+    private ip_api_dns? apiRes;
+    private Dictionary<string, surfshardDns>? res4;
+    private Dictionary<string, surfshardDns>? res6;
+
+    private int DistinctIps =>
+        cards.Where(c => c.Ok).Select(c => c.Ip).Distinct().Count();
+
+    private List<Row> Detail
+    {
+        get
+        {
+            var rows = new List<Row>();
+
+            if (apiRes?.dns is not null)
+            {
+                rows.Add(new Row("ip-api · 解析器 IP", string.IsNullOrEmpty(apiRes.dns.ip) ? "—" : apiRes.dns.ip, "v-ip"));
+                rows.Add(new Row("ip-api · 归属地", string.IsNullOrEmpty(apiRes.dns.geo) ? "—" : apiRes.dns.geo));
+            }
+
+            AddDict(rows, "ipv4.surfsharkdns", res4);
+            AddDict(rows, "ipv6.surfsharkdns", res6);
+
+            if (rows.Count == 0)
+            {
+                rows.Add(new Row("明细", "三个来源都没有返回数据", "is-dim"));
+            }
+
+            return rows;
+        }
+    }
+
+    private static void AddDict(List<Row> rows, string tag, Dictionary<string, surfshardDns>? dict)
+    {
+        if (dict is null || dict.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var pair in dict)
+        {
+            var v = pair.Value;
+            rows.Add(new Row($"{tag} · {pair.Key}", string.IsNullOrEmpty(v.IP) ? "—" : v.IP, "v-ip"));
+            rows.Add(new Row($"{tag} · ISP", string.IsNullOrEmpty(v.ISP) ? "—" : v.ISP));
+            rows.Add(new Row($"{tag} · City", string.IsNullOrEmpty(v.City) ? "—" : v.City));
+            rows.Add(new Row($"{tag} · Country", string.IsNullOrEmpty(v.Country) ? "—" : v.Country));
+            rows.Add(new Row($"{tag} · Leak", v.Leak ? "是" : "否", v.Leak ? "is-err" : "is-dim"));
+        }
+    }
+
+    private static async Task<Res<T>> TryGet<T>(HttpClient client, string url)
+    {
+        try
+        {
+            return new Res<T>(await client.GetFromJsonAsync<T>(url), null);
+        }
+        catch (Exception ex)
+        {
+            return new Res<T>(default, ex.Message);
+        }
+    }
+
+    private async Task Run()
+    {
+        error = null;
+        copied = "";
+        busy = true;
+        cards = new List<Card>();
+        apiRes = null;
+        res4 = null;
+        res6 = null;
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+
+            var t1 = TryGet<ip_api_dns>(client, "https://edns.ip-api.com/json");
+            var t2 = TryGet<Dictionary<string, surfshardDns>>(client, "https://www.ipv4.surfsharkdns.com");
+            var t3 = TryGet<Dictionary<string, surfshardDns>>(client, "https://ipv6.surfsharkdns.com");
+
+            await Task.WhenAll(t1, t2, t3);
+
+            var r1 = t1.Result;
+            var r2 = t2.Result;
+            var r3 = t3.Result;
+
+            apiRes = r1.Value;
+            res4 = r2.Value;
+            res6 = r3.Value;
+
+            cards = new List<Card>
+            {
+                Card1(r1),
+                Card2("Surfshark IPv4", r2),
+                Card2("Surfshark IPv6", r3),
+            };
+        }
+        catch (Exception ex)
+        {
+            error = "检测过程出错：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private static Card Card1(Res<ip_api_dns> r)
+    {
+        if (r.Error is not null) return new Card("ip-api (EDNS)", "请求失败", r.Error, false, false);
+        if (r.Value is null) return new Card("ip-api (EDNS)", "空响应", "接口没有返回数据", false, false);
+
+        var d = r.Value.dns;
+        string ip = string.IsNullOrEmpty(d?.ip) ? "—" : d.ip;
+        return new Card("ip-api (EDNS)", ip,
+                        string.IsNullOrEmpty(d?.geo) ? "EDNS 客户端子网看到的出口" : d.geo,
+                        true, true);
+    }
+
+    private static Card Card2(string name, Res<Dictionary<string, surfshardDns>> r)
+    {
+        if (r.Error is not null) return new Card(name, "请求失败", r.Error, false, false);
+        if (r.Value is null || r.Value.Count == 0) return new Card(name, "空响应", "接口没有返回任何记录", false, false);
+
+        var v = r.Value.First().Value;
+        string ip = string.IsNullOrEmpty(v.IP) ? "—" : v.IP;
+        string hint = string.Join(" · ", new[] { v.ISP, v.City }.Where(s => !string.IsNullOrEmpty(s)));
+        return new Card(name, ip, hint.Length == 0 ? "该端点返回的出口地址" : hint, !v.Leak, true);
+    }
+
+    private void Clear()
+    {
+        cards = new List<Card>();
+        apiRes = null;
+        res4 = null;
+        res6 = null;
+        error = null;
+        copied = "";
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = value;
+        }
+        catch
+        {
+            copied = "";
+        }
+    }
+
     public class endDns
     {
         public string geo { get; set; }
         public string ip { get; set; }
     }
+
     public class ip_api_dns
     {
         public endDns dns { get; set; }
-        public endDns edns{ get; set; }
+        public endDns edns { get; set; }
     }
+
     public class surfshardDns
     {
         public string ISP { get; set; }
@@ -88,5 +281,5 @@
         public string IP { get; set; }
         public bool Leak { get; set; }
         public string CountryCode { get; set; }
-    }  
+    }
 }

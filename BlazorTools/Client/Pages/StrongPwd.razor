@@ -1,99 +1,256 @@
 ﻿@page "/strongpwd"
+@using System.Security.Cryptography
+@inject IJSRuntime JS
+
+<PageTitle>强密码生成 · BlazorTools</PageTitle>
+
 <h3>强密码生成</h3>
 
-
-<div class="input-group">
-    <label style="margin:5px;">长度</label>
-    <input type="number" @bind-value="@length">
-    <button class="btn btn-primary" @onclick="@(e=>{p_result=GeneratePWD(CK_abc,CK_ABC,CK_Num,CK_Sym,length);StateHasChanged();})">生成</button>
-</div>
-
-<div style="margin:5px;">
-    <label>大写字母</label>
-    <input type="checkbox" checked="@CK_ABC" @bind-value="@CK_ABC">&nbsp;&nbsp;
-    <label>小写字母</label>
-    <input type="checkbox" checked="@CK_abc" @bind-value="@CK_abc">&nbsp;&nbsp;
-    <label>数字</label>
-    <input type="checkbox" checked="@CK_Num" @bind-value="@CK_Num">&nbsp;&nbsp;
-    <label>符号</label>
-    <input type="checkbox" checked="@CK_Sym" @bind-value="@CK_Sym">&nbsp;&nbsp;
-</div>
-
-
-<hr />
-<p>
-    @p_result
+<p class="page-note">
+    用密码学随机数（<code>RandomNumberGenerator</code>，不是 <code>Random</code>）生成口令，
+    并保证<b>每个勾选的字符集至少出现一次</b>。全部在本地生成，不上传、不记录。
 </p>
 
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">参数</span>
+        <span class="panel-sub">字符集越大、长度越长，熵越高</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="pwd-len">长度</label>
+            <input id="pwd-len" class="form-control" type="number" min="4" max="256" step="1"
+                   @bind="length" @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">快捷长度</span>
+        @foreach (var n in Presets)
+        {
+            <button type="button" class="chip-btn @(length == n ? "is-on" : null)"
+                    title="@n 位"
+                    @onclick="() => SetLen(n)">@n</button>
+        }
+    </div>
+
+    <div class="check-row">
+        <label class="check-chip @(useLower ? "is-on" : null)">
+            <input type="checkbox" @bind="useLower" />
+            <span class="tick" aria-hidden="true">✓</span>
+            <span>小写 a-z <b>@PoolLower.Length</b></span>
+        </label>
+
+        <label class="check-chip @(useUpper ? "is-on" : null)">
+            <input type="checkbox" @bind="useUpper" />
+            <span class="tick" aria-hidden="true">✓</span>
+            <span>大写 A-Z <b>@PoolUpper.Length</b></span>
+        </label>
+
+        <label class="check-chip @(useDigit ? "is-on" : null)">
+            <input type="checkbox" @bind="useDigit" />
+            <span class="tick" aria-hidden="true">✓</span>
+            <span>数字 0-9 <b>@PoolDigit.Length</b></span>
+        </label>
+
+        <label class="check-chip @(useSymbol ? "is-on" : null)">
+            <input type="checkbox" @bind="useSymbol" />
+            <span class="tick" aria-hidden="true">✓</span>
+            <span>符号 !@@# <b>@PoolSymbol.Length</b></span>
+        </label>
+
+        <label class="check-chip @(noAmbiguous ? "is-on" : null)" title="剔除 0 O o l I 1 这类容易看错的字符">
+            <input type="checkbox" @bind="noAmbiguous" />
+            <span class="tick" aria-hidden="true">✓</span>
+            <span>排除易混字符</span>
+        </label>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="Generate">生成</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip">字符空间 <b>@AlphabetSize</b></span>
+        <span class="stat-chip">理论强度 <b>@EntropyBits</b> bit</span>
+        <span class="stat-chip">评价 <b>@Rating</b></span>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (password.Length > 0)
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">生成结果</span>
+            <span class="panel-tools">
+                <button type="button" class="copy-btn" title="复制密码" aria-label="复制密码"
+                        @onclick='async () => await Copy(password)'>@(copied ? "✓" : "⧉")</button>
+            </span>
+        </div>
+
+        <div class="out-box is-lg v-pwd">@password</div>
+
+        <div class="btn-row">
+            <button type="button" class="btn btn-primary" @onclick='async () => await Copy(password)'>复制密码</button>
+            <button type="button" class="btn" @onclick="Generate">再生成一个</button>
+        </div>
+
+        <div class="stat-strip">
+            <span class="stat-chip">长度 <b>@password.Length</b></span>
+            <span class="stat-chip">小写 <b>@Count(password, char.IsLower)</b></span>
+            <span class="stat-chip">大写 <b>@Count(password, char.IsUpper)</b></span>
+            <span class="stat-chip">数字 <b>@Count(password, char.IsDigit)</b></span>
+            <span class="stat-chip">其它 <b>@Count(password, c => !char.IsLetterOrDigit(c))</b></span>
+        </div>
+    </div>
+}
+
 @code {
-    string p_result { get; set; } = "";
-    int length { get; set; } = 20;
-    bool CK_ABC { get; set; } = true;
-    bool CK_abc { get; set; } = true;
-    bool CK_Num { get; set; } = true;
-    bool CK_Sym { get; set; } = true;
-    char gen_abc()
+    private static readonly int[] Presets = { 8, 12, 16, 20, 32, 64 };
+
+    private const string LowerRaw = "abcdefghijklmnopqrstuvwxyz";
+    private const string UpperRaw = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    private const string DigitRaw = "0123456789";
+    private const string SymbolRaw = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+
+    /// <summary>容易看错的字符：0/O/o、1/l/I。</summary>
+    private const string Ambiguous = "0Oo1lI";
+
+    private int length = 20;
+    private bool useLower = true;
+    private bool useUpper = true;
+    private bool useDigit = true;
+    private bool useSymbol = true;
+    private bool noAmbiguous = false;
+
+    private string password = "";
+    private string? error = null;
+    private bool copied = false;
+
+    private string PoolLower => Filter(LowerRaw);
+    private string PoolUpper => Filter(UpperRaw);
+    private string PoolDigit => Filter(DigitRaw);
+    private string PoolSymbol => Filter(SymbolRaw);
+
+    private string Alphabet =>
+        (useLower ? PoolLower : "") +
+        (useUpper ? PoolUpper : "") +
+        (useDigit ? PoolDigit : "") +
+        (useSymbol ? PoolSymbol : "");
+
+    private int AlphabetSize => Alphabet.Length;
+
+    private string EntropyBits =>
+        AlphabetSize <= 1 ? "0" : (length * Math.Log2(AlphabetSize)).ToString("0");
+
+    private string Rating
     {
-        int[] xiaoxie = new int[] { 97, 122 };
-        Random rd = new Random();
-        return (char)rd.Next(xiaoxie[0], xiaoxie[1] + 1);
-    }
-    char gen_ABC()
-    {
-        int[] daxie = new int[] { 65, 90 };
-        Random rd = new Random();
-        return (char)rd.Next(daxie[0], daxie[1] + 1);
-    }
-    char gen_NumberChar()
-    {
-        int[] shuzi = new int[] { 48, 57 };
-        Random rd = new Random();
-        return (char)rd.Next(shuzi[0], shuzi[1] + 1);
-    }
-    char gen_RDSYMChar()
-    {
-        List<int[]> lst = new List<int[]>
+        get
+        {
+            int bits = (int)Math.Round(AlphabetSize <= 1 ? 0 : length * Math.Log2(AlphabetSize));
+            return bits switch
             {
-                new int[] { 33, 47 },//! /
-                new int[] {58,64 },//: @
-                new int[] { 91,96 },//[ `
-                new int[] { 123, 126 },//{ ~
+                < 40 => "偏弱",
+                < 60 => "可用",
+                < 90 => "较强",
+                < 120 => "强",
+                _ => "极强",
             };
-        Random rd = new Random();
-        int idx = rd.Next(0, lst.Count);
-        var array = lst[idx];
-        return (char)rd.Next(array[0], array[1] + 1);
+        }
     }
 
-    delegate char generateChar();
-    public string GeneratePWD(bool abc, bool ABC, bool num, bool sym, int len)
+    private string Filter(string pool) =>
+        noAmbiguous ? string.Concat(pool.Where(c => !Ambiguous.Contains(c))) : pool;
+
+    private static int Count(string s, Func<char, bool> pred) => s.Count(pred);
+
+    private void SetLen(int n)
     {
-        if (len < 10)
-            len = 10;
-        List<generateChar> generates = new List<generateChar>();
-        if (abc)
-            generates.Add(gen_abc);
-        if (ABC)
-            generates.Add(gen_ABC);
-        if (sym)
-            generates.Add(gen_RDSYMChar);
-        if (num)
-            generates.Add(gen_NumberChar);
-        if (generates.Count == 0)
-            return "";
-        lb_Start:
-        string result = "";
-        bool[] array = new bool[generates.Count];
-        Random rnd = new Random();
-        for (int i = 0; i < len; i++)
+        length = n;
+        error = null;
+        copied = false;
+        if (password.Length > 0) Generate();
+    }
+
+    private void Generate()
+    {
+        error = null;
+        copied = false;
+
+        int len = length;
+        if (len < 4)
         {
-            var idx = rnd.Next(0, generates.Count);
-            array[idx] = true;
-            var fnccc = generates[idx];
-            result += fnccc();
+            error = "长度至少 4 位，已按 4 位处理。";
+            len = 4;
+            length = 4;
         }
-        if (array.Contains(false) == true)
-            goto lb_Start;
-        return result;
+        if (len > 256)
+        {
+            error = "长度上限 256 位，已按 256 位处理。";
+            len = 256;
+            length = 256;
+        }
+
+        // 每个字符集抽一个，确保都覆盖
+        var groups = new List<string>();
+        if (useLower) groups.Add(PoolLower);
+        if (useUpper) groups.Add(PoolUpper);
+        if (useDigit) groups.Add(PoolDigit);
+        if (useSymbol) groups.Add(PoolSymbol);
+
+        var alphabet = Alphabet;
+        if (string.IsNullOrEmpty(alphabet))
+        {
+            password = "";
+            error = "至少要勾选一种字符集。";
+            return;
+        }
+
+        if (len < groups.Count)
+        {
+            error = $"长度 {len} 小于勾选的字符集数量 {groups.Count}，无法保证每种都出现，已放宽为每个都尽量包含。";
+            len = groups.Count;
+        }
+
+        var chars = new List<char>(len);
+        foreach (var g in groups)
+        {
+            if (g.Length > 0) chars.Add(Pick(g));
+        }
+
+        while (chars.Count < len) chars.Add(Pick(alphabet));
+
+        // Fisher-Yates 洗牌，用密码学随机数源
+        for (int i = chars.Count - 1; i > 0; i--)
+        {
+            int j = RandomNumberGenerator.GetInt32(i + 1);
+            (chars[i], chars[j]) = (chars[j], chars[i]);
+        }
+
+        password = new string(chars.ToArray());
+    }
+
+    private static char Pick(string pool) => pool[RandomNumberGenerator.GetInt32(pool.Length)];
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = true;
+        }
+        catch
+        {
+            copied = false;
+        }
     }
 }

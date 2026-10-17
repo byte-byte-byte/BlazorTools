@@ -1,37 +1,195 @@
 ﻿@page "/modbusCRC"
 @using BlazorTools.Shared
-<h3>ModbusCrc</h3>
+@inject IJSRuntime JS
 
-<label class="group-text">数组:</label>
-<div class="input-group mb-3">
-    <input @bind-value="@ip_Data" type="text" class="form-control" placeholder="请输入数组">
-    <button type="button" class="btn btn-primary" onclick="@btn_CalcCrc">计算</button>
+<PageTitle>CRC 计算 · BlazorTools</PageTitle>
+
+<h3>CRC 计算</h3>
+
+<p class="page-note">
+    输入十六进制字节序列（空格、逗号、<code>0x</code> 前缀都可以），计算 Modbus CRC16、CRC32 与三种校验和。
+    结果按 <b>低字节在前</b> 输出——这正是 Modbus RTU 报文里的字节顺序。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">数据帧</span>
+        <span class="panel-sub">十六进制字节序列</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="crc-data">数组</label>
+            <input id="crc-data"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="01 03 00 00 00 01"
+                   @bind="data"
+                   @bind:event="oninput"
+                   @onkeydown="OnKeyDown" />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">示例帧</span>
+        @foreach (var d in Demos)
+        {
+            <button type="button" class="chip-btn @(data == d.Value ? "is-on" : null)"
+                    title="@d.Value"
+                    @onclick="() => UseDemo(d.Value)">@d.Name</button>
+        }
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="Calc">计算</button>
+        <button type="button" class="btn" @onclick="Clear">清空</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip">解析出 <b>@ByteCount</b> 字节</span>
+    </div>
 </div>
-<label>ModbusCRC16: @crc</label>
-<br />
-<label>CRC32: @crc32</label>
-<br />
-<label>ADD8: @add8</label>
-<br />
-<label>ADD16: @add16</label>
-<br />
-<label>XOR8: @xor8</label>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (rows is not null)
+{
+    <div class="metric-grid">
+        @foreach (var row in rows)
+        {
+            <div class="metric @(row.Hi ? "is-hi" : null)">
+                <div class="metric-k">@row.K</div>
+                <div class="metric-v">@row.V</div>
+                <div class="metric-hint">@row.Hint</div>
+                <button type="button"
+                        class="copy-btn @(copied == row.V ? "is-done" : null)"
+                        title="复制 @row.K"
+                        aria-label="复制 @row.K"
+                        @onclick="async () => await Copy(row.V)">@(copied == row.V ? "✓" : "⧉")</button>
+            </div>
+        }
+    </div>
+}
 
 @code {
-    string ip_Data { get; set; }
-    string crc { get; set; }
-    string crc32 { get; set; }
-    string add8 { get; set; }
-    string xor8 { get; set; }
-    string add16 { get; set; }
-    void btn_CalcCrc(EventArgs e)
+    private string data = "";
+    private Row[]? rows = null;
+    private string? error = null;
+    private string copied = "";
+    private int byteCount = 0;
+
+    private int ByteCount => byteCount;
+
+    private sealed record DemoItem(string Name, string Value);
+
+    private static readonly DemoItem[] Demos =
     {
-        crc = CRCHelper.ToModbusCRC16(ip_Data);
-        CRC32Cls CRC = new CRC32Cls();
-        crc32 = CRC.GetCRC32Str(ip_Data);
-        add8 = ADD8Cls.ToADD8(ip_Data);
-        add16 = ADD16Cls.ToADD16(ip_Data);
-        xor8 = XOR8Cls.ToXor8(ip_Data);
-        StateHasChanged();
+        new("读保持寄存器", "01 03 00 00 00 01"),
+        new("写单寄存器",   "01 06 00 01 00 17"),
+        new("写多寄存器",   "01 10 00 01 00 02 04 00 0A 01 02"),
+    };
+
+    private sealed record Row(string K, string V, bool Hi, string Hint);
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") Calc();
+    }
+
+    private void UseDemo(string value)
+    {
+        data = value;
+        error = null;
+        copied = "";
+        rows = null;
+        byteCount = 0;
+    }
+
+    private void Calc()
+    {
+        error = null;
+        copied = "";
+        rows = null;
+        byteCount = 0;
+
+        var text = (data ?? "").Trim();
+        if (text.Length == 0)
+        {
+            error = "请输入十六进制字节序列，例如 01 03 00 00 00 01。";
+            return;
+        }
+
+        byte[] buf;
+        try
+        {
+            buf = DataFormate.StringToHexByte(text);
+        }
+        catch
+        {
+            error = "解析失败：请只填两位一组的十六进制（0-9 A-F），可用空格 / 逗号 / 0x 分隔。";
+            return;
+        }
+
+        if (buf.Length == 0)
+        {
+            error = "没有解析出任何字节，请检查输入。";
+            return;
+        }
+
+        byteCount = buf.Length;
+
+        string modbus, crc32, add8, add16, xor8;
+        try
+        {
+            modbus = (CRCHelper.ToModbusCRC16(text) ?? "").Trim();
+            crc32 = (new CRC32Cls().GetCRC32Str(text) ?? "").Trim();
+            add8 = (ADD8Cls.ToADD8(text) ?? "").Trim();
+            add16 = (ADD16Cls.ToADD16(text) ?? "").Trim();
+            xor8 = (XOR8Cls.ToXor8(text) ?? "").Trim();
+        }
+        catch (Exception ex)
+        {
+            error = "计算出错：" + ex.Message;
+            return;
+        }
+
+        rows = new[]
+        {
+            new Row("Modbus CRC16", modbus, true, "多项式 0xA001，低字节在前（RTU 报文顺序）"),
+            new Row("CRC32",        crc32,  true, "多项式 0xEDB88320，初值 0xFFFFFFFF，结果异或取反"),
+            new Row("ADD8 累加和",  add8,   false, "逐字节相加取低 8 位（模 256，溢出自动回卷）"),
+            new Row("ADD16 累加和", add16,  false, "逐字节相加取低 16 位（模 65536）"),
+            new Row("XOR8 异或校验", xor8,  false, "逐字节异或，又称 BCC 块校验"),
+        };
+    }
+
+    private void Clear()
+    {
+        data = "";
+        rows = null;
+        error = null;
+        copied = "";
+        byteCount = 0;
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = value;
+        }
+        catch
+        {
+            copied = "";
+        }
     }
 }

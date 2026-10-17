@@ -1,69 +1,170 @@
 ﻿@page "/qrcode"
 @inject IJSRuntime JS
+
+<PageTitle>二维码 · BlazorTools</PageTitle>
+
 <h3>二维码</h3>
-<div id="qrcode"></div>
 
-<br />
-<div class="input-group mb-3">
-    <input @bind-value="@ip_KeyLen" type="text" class="form-control" placeholder="输入字符串">
-    <button type="button" class="btn btn-primary" onclick="@btnClick">生成</button>
+<p class="page-note">
+    文本 / 链接转二维码图片，以及从图片里识别二维码内容。生成与识别都在浏览器本地完成，
+    图片不上传。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">生成 Generate</span>
+        <span class="panel-sub">输入内容后点生成</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="qr-text">内容</label>
+            <input id="qr-text" class="form-control" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="https://example.com"
+                   @bind="text" @bind:event="oninput"
+                   @onkeydown='async e => { if (e.Key == "Enter") await Gen(); }' />
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="Gen">生成二维码</button>
+        <button type="button" class="btn" @onclick='async () => { text = "https://example.com"; await Gen(); }'>填入示例</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip">内容 <b>@Len(text)</b> 字符</span>
+        <span class="stat-chip">UTF-8 <b>@Bytes(text)</b> 字节</span>
+        <span class="stat-chip">纠错等级 <b>H 30%</b></span>
+    </div>
 </div>
-<br />
-<p>识别图片</p>
-<img id="helloimg" width="100" height="100"/>
-<InputFile OnChange="@LoadFiles"  accept="image/x-png,image/gif,image/jpeg,image/bmp"/>
-<p>@deResult</p>
-@code {
-    #region 上传区域
-    private List<IBrowserFile> loadedFiles = new();
-    private long maxFileSize = 1024 * 15;
-    private int maxAllowedFiles = 3;
-    private bool isLoading;
-    private string deResult { get; set; } = "";
-    private async Task LoadFiles(InputFileChangeEventArgs e)
-    {
-        isLoading = true;
-        loadedFiles.Clear();
 
-        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">二维码图像</span>
+    </div>
+    <div class="preview-box">
+        <div id="qrcode"></div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">识别 Decode</span>
+        <span class="panel-sub">从图片里读出二维码内容</span>
+    </div>
+
+    <div class="file-pick">
+        <InputFile OnChange="LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp" />
+        @if (busy)
         {
-            try
-            {
-                if (file.ContentType.IndexOf("image") >= 0)
-                {
-                    var stream = file.OpenReadStream();
-
-                    byte[] buf = new byte[stream.Length];
-                    await stream.ReadAsync(buf);
-                    await JS.InvokeVoidAsync("decodeQRCode", "helloimg", buf);
-                }
-                loadedFiles.Add(file);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
+            <span class="spin">识别中</span>
         }
+    </div>
 
-        isLoading = false;
+    <div class="preview-box">
+        <img id="helloimg" src="@decodedImage" alt="待识别的图片" hidden="@(decodedImage is null)" />
+        @if (decodedImage is null)
+        {
+            <span class="preview-empty">尚未选择图片</span>
+        }
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(decoded))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">识别结果</span>
+            <span class="panel-tools">
+                <button type="button" class="copy-btn" title="复制识别结果" aria-label="复制识别结果"
+                        @onclick='async () => await Copy(decoded)'>@(copied ? "✓" : "⧉")</button>
+            </span>
+        </div>
+        <div class="out-box">@decoded</div>
+        <div class="btn-row">
+            <button type="button" class="btn btn-primary" @onclick='async () => await Copy(decoded)'>复制结果</button>
+            <button type="button" class="btn" @onclick='async () => { text = decoded; await Gen(); }'>用它生成二维码</button>
+        </div>
+    </div>
+}
+
+@code {
+    private string text = "hello world";
+    private string decoded = "";
+    private string? decodedImage = null;
+    private bool busy = false;
+    private bool copied = false;
+    private string? error = null;
+
+    private static Func<string, Task>? refreshPanel;
+
+    private static int Len(string? s) => s?.Length ?? 0;
+
+    private static int Bytes(string? s) =>
+        string.IsNullOrEmpty(s) ? 0 : System.Text.Encoding.UTF8.GetByteCount(s);
+
+    private async Task Gen()
+    {
+        error = null;
+        try
+        {
+            await JS.InvokeVoidAsync("generateQRCode", text ?? "");
+        }
+        catch (Exception ex)
+        {
+            error = "生成失败：" + ex.Message;
+        }
     }
-    static Func<string,Task> refreshPanel;
+
     [JSInvokable]
     public static async Task ReturnDeCode(string decodeResult)
     {
-        await refreshPanel.Invoke(decodeResult);
-
+        if (refreshPanel is not null)
+        {
+            await refreshPanel.Invoke(decodeResult);
+        }
     }
 
-    #endregion
-    #region 二维码生成区域
-    string ip_KeyLen { get; set; } = "hello world";
-    async Task btnClick(EventArgs e)
+    private async Task LoadFiles(InputFileChangeEventArgs e)
     {
-        await JS.InvokeVoidAsync("generateQRCode", ip_KeyLen);
-    }
-    #endregion
+        error = null;
+        copied = false;
+        decoded = "";
+        busy = true;
 
+        try
+        {
+            var file = e.File;
+            if (!file.ContentType.StartsWith("image", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"“{file.Name}”不是图片。";
+                return;
+            }
+
+            await using var stream = file.OpenReadStream(32L * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            await JS.InvokeVoidAsync("decodeQRCode", "helloimg", ms.ToArray());
+
+            decodedImage = "data:" + file.ContentType + ";base64," + Convert.ToBase64String(ms.ToArray());
+        }
+        catch (Exception ex)
+        {
+            error = "读取失败：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
 
     static string scriptInit()
     {
@@ -95,8 +196,8 @@
         image.src = url;
     }}
 ";
-
     }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         await base.OnAfterRenderAsync(firstRender);
@@ -105,17 +206,34 @@
             string scriptContent;
             using (var stream = this.GetType().Assembly.GetManifestResourceStream(this.GetType().Assembly.GetName().Name + ".Pages.QRCode.razor.js"))
             {
-                using (var sr = new System.IO.StreamReader(stream))
+                using (var sr = new System.IO.StreamReader(stream!))
                     scriptContent = await sr.ReadToEndAsync();
             }
+
             await JS.InvokeVoidAsync("eval", scriptContent);
             await JS.InvokeVoidAsync("eval", scriptInit());
-            refreshPanel = (str)=> { 
-                deResult=str;
+            refreshPanel = s =>
+            {
+                decoded = s;
+                busy = false;
                 StateHasChanged();
                 return Task.CompletedTask;
             };
-        }
 
+            await Gen();
+        }
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = true;
+        }
+        catch
+        {
+            copied = false;
+        }
     }
 }

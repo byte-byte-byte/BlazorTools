@@ -1,83 +1,247 @@
 ﻿@page "/dateconvert"
+@inject IJSRuntime JS
+
+<PageTitle>DateConvert · BlazorTools</PageTitle>
+
 <h3>DateConvert</h3>
 
+<p class="page-note">
+    时间戳与日期时间互转。任意一格改动，其余四格立刻跟着换算。
+    <code>Unix</code> 时间以 1970-01-01 00:00:00 UTC 为原点；<code>C# Ticks</code> 以 0001-01-01 00:00:00 为原点，1 tick = 100 ns。
+    换算按当前时区 <b>@Tz.Id</b>（UTC@OffsetLabel）进行。
+</p>
 
-<label>Local</label>
-<div class="input-group">
-    <input class="form-control" step=1 type="datetime-local" @bind="@date"></input>
-    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.DATE))">转换</button>
-</div>
-<br />
-<label>UTC</label>
-<div class="input-group">
-    <input class="form-control" step=1 type="datetime-local" @bind="@dateUtc"></input>
-    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.DATEUTC))">转换</button>
-</div>
-<br />
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">时间换算</span>
+        <span class="panel-sub">改任意一格即联动</span>
+        <span class="panel-tools">
+            <button type="button" class="chip-btn" @onclick="Now">现在 NOW</button>
+        </span>
+    </div>
 
-<label>unix时间(s)</label>
-<div class="input-group">
-    <input class="form-control" @bind-value="@uxTicks" />
-    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.UNIXS))">转换</button>
-</div>
-<br />
+    <div class="form-grid">
+        <div class="field">
+            <label for="dc-local">Local 本地时间</label>
+            <input id="dc-local" class="form-control" type="datetime-local" step="1"
+                   value="@Val(Src.Local)"
+                   @onchange="e => Set(Src.Local, e.Value?.ToString())" />
+        </div>
 
-<label>unix时间(ms)</label>
-<div class="input-group">
-    <input class="form-control" @bind-value="@uxTickms" />
-    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.UNIXMS))">转换</button>
-</div>
-<br />
+        <div class="field">
+            <label for="dc-utc">UTC 协调世界时</label>
+            <input id="dc-utc" class="form-control" type="datetime-local" step="1"
+                   value="@Val(Src.Utc)"
+                   @onchange="e => Set(Src.Utc, e.Value?.ToString())" />
+        </div>
 
-<label>C# Ticks</label>
-<div class="input-group">
-    <input class="form-control" @bind-value="@csTick" />
-    <button class="btn btn-primary" @onclick="@(e=>refreshTime(e,Inputenum.CSTICK))">转换</button>
+        <div class="field">
+            <label for="dc-us">Unix 时间 (s)</label>
+            <input id="dc-us" class="form-control" type="text" inputmode="numeric" autocomplete="off"
+                   spellcheck="false" placeholder="@Val(Src.UnixS)"
+                   value="@Val(Src.UnixS)"
+                   @onchange="e => Set(Src.UnixS, e.Value?.ToString())" />
+        </div>
+
+        <div class="field">
+            <label for="dc-ums">Unix 时间 (ms)</label>
+            <input id="dc-ums" class="form-control" type="text" inputmode="numeric" autocomplete="off"
+                   spellcheck="false" placeholder="@Val(Src.UnixMs)"
+                   value="@Val(Src.UnixMs)"
+                   @onchange="e => Set(Src.UnixMs, e.Value?.ToString())" />
+        </div>
+
+        <div class="field">
+            <label for="dc-ticks">C# Ticks</label>
+            <input id="dc-ticks" class="form-control" type="text" inputmode="numeric" autocomplete="off"
+                   spellcheck="false" placeholder="100ns 计数"
+                   value="@Val(Src.Ticks)"
+                   @onchange="e => Set(Src.Ticks, e.Value?.ToString())" />
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="Now">取当前时间</button>
+        <button type="button" class="btn" @onclick='() => Set(Src.UnixS, "0")'>回到 Unix 0</button>
+    </div>
 </div>
-<br />
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+<div class="metric-grid">
+    @foreach (var row in Rows)
+    {
+        <div class="metric @(row.Hi ? "is-hi" : null) @(row.Wide ? "is-wide" : null)">
+            <div class="metric-k">@row.K</div>
+            <div class="metric-v v-num @row.Css">@row.V</div>
+            <div class="metric-hint">@row.Hint</div>
+            <button type="button"
+                    class="copy-btn @(copied == row.V ? "is-done" : null)"
+                    title="复制 @row.K"
+                    aria-label="复制 @row.K"
+                    @onclick="async () => await Copy(row.V)">@(copied == row.V ? "✓" : "⧉")</button>
+        </div>
+    }
+</div>
 
 @code {
-    DateTime date = DateTime.Now;
-    DateTime dateUtc;
-    long csTick = 0;
-    long uxTickms, uxTicks;
-    enum Inputenum
+    private enum Src { Local, Utc, UnixS, UnixMs, Ticks }
+
+    private DateTime cur = Crop(DateTime.Now);
+    private string? error = null;
+    private string copied = "";
+
+    private sealed record Row(string K, string V, bool Hi = false, bool Wide = false, string? Hint = null, string? Css = null);
+
+    private static readonly string[] ZhDow = { "星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六" };
+
+    /// <summary>InvariantGlobalization 下 TimeZoneInfo.Local 可能不可用，兜底到 UTC。</summary>
+    private static TimeZoneInfo Tz
     {
-        DATE,
-        DATEUTC,
-        CSTICK,
-        UNIXS,
-        UNIXMS
-    }
-    private void refreshTime(MouseEventArgs? e, Inputenum itype)
-    {
-        string localID = TimeZoneInfo.Local.Id;
-        DateTime StartDateTime = TimeZoneInfo.ConvertTime(new DateTime(1970, 1, 1), TimeZoneInfo.FindSystemTimeZoneById(localID));
-        switch (itype)
+        get
         {
-            case Inputenum.DATE: break;
-            case Inputenum.DATEUTC:
-                date = TimeZoneInfo.ConvertTimeFromUtc(dateUtc, TimeZoneInfo.Local);
-                break;
-            case Inputenum.CSTICK:
-                date = new DateTime(csTick);
-                break;
-            case Inputenum.UNIXS:
-                date = StartDateTime.AddSeconds(uxTicks);
-                break;
-            case Inputenum.UNIXMS:
-                date = StartDateTime.AddMilliseconds(uxTickms);
-                break;
+            try { return TimeZoneInfo.Local; }
+            catch { return TimeZoneInfo.Utc; }
         }
-        dateUtc = TimeZoneInfo.ConvertTime(date, TimeZoneInfo.Utc);
-        csTick = date.Ticks;
-        uxTickms = (long)(date - StartDateTime).TotalMilliseconds;
-        uxTicks = (long)(date - StartDateTime).TotalSeconds;
-    }
-    protected override void OnInitialized()
-    {
-        base.OnInitialized();
-        refreshTime(null, Inputenum.DATE);
     }
 
+    private string OffsetLabel
+    {
+        get
+        {
+            var o = Tz.GetUtcOffset(cur);
+            return (o < TimeSpan.Zero ? "-" : "+") + o.Hours.ToString("00") + ":" + o.Minutes.ToString("00");
+        }
+    }
+
+    /// <summary>截到整秒：datetime-local step=1 精度只到秒，留小数会让来回换算抖动。</summary>
+    private static DateTime Crop(DateTime dt) =>
+        new(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second, DateTimeKind.Unspecified);
+
+    private static DateTime ToUtcWall(DateTime localWall) => TimeZoneInfo.ConvertTimeToUtc(localWall, Tz);
+
+    private static DateTime ToLocalWall(DateTime utcWall) =>
+        TimeZoneInfo.ConvertTimeFromUtc(utcWall, Tz);
+
+    private static DateTimeOffset Dto(DateTime localWall) =>
+        new(localWall, Tz.GetUtcOffset(localWall));
+
+    private string Val(Src s) => s switch
+    {
+        Src.Local  => cur.ToString("yyyy-MM-ddTHH:mm:ss"),
+        Src.Utc    => ToUtcWall(cur).ToString("yyyy-MM-ddTHH:mm:ss"),
+        Src.UnixS  => Dto(cur).ToUnixTimeSeconds().ToString(),
+        Src.UnixMs => Dto(cur).ToUnixTimeMilliseconds().ToString(),
+        Src.Ticks  => cur.Ticks.ToString(),
+        _          => "",
+    };
+
+    private void Set(Src s, string? raw)
+    {
+        error = null;
+        copied = "";
+
+        var text = (raw ?? "").Trim();
+        if (text.Length == 0) return;
+
+        try
+        {
+            switch (s)
+            {
+                case Src.Local:
+                {
+                    if (!DateTime.TryParse(text, out var p)) throw new FormatException("不是合法的日期时间。");
+                    cur = Crop(DateTime.SpecifyKind(p, DateTimeKind.Unspecified));
+                    break;
+                }
+                case Src.Utc:
+                {
+                    if (!DateTime.TryParse(text, out var p)) throw new FormatException("不是合法的日期时间。");
+                    cur = Crop(ToLocalWall(DateTime.SpecifyKind(p, DateTimeKind.Utc)));
+                    break;
+                }
+                case Src.UnixS:
+                {
+                    if (!long.TryParse(text, out long v)) throw new FormatException("Unix 秒必须是整数。");
+                    cur = Crop(ToLocalWall(DateTimeOffset.FromUnixTimeSeconds(v).UtcDateTime));
+                    break;
+                }
+                case Src.UnixMs:
+                {
+                    if (!long.TryParse(text, out long v)) throw new FormatException("Unix 毫秒必须是整数。");
+                    cur = Crop(ToLocalWall(DateTimeOffset.FromUnixTimeMilliseconds(v).UtcDateTime));
+                    break;
+                }
+                case Src.Ticks:
+                {
+                    if (!long.TryParse(text, out long v)) throw new FormatException("Ticks 必须是整数。");
+                    if (v < 0 || v > DateTime.MaxValue.Ticks)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(v), "超出 DateTime 可表示的范围（0 ~ " + DateTime.MaxValue.Ticks + "）。");
+                    }
+                    cur = Crop(new DateTime(v));
+                    break;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            error = "输入无法解析：" + ex.Message;
+        }
+    }
+
+    private void Now()
+    {
+        error = null;
+        copied = "";
+        cur = Crop(DateTime.Now);
+    }
+
+    private Row[] Rows
+    {
+        get
+        {
+            var dto = Dto(cur);
+            var utc = ToUtcWall(cur);
+            int week = System.Globalization.CultureInfo.InvariantCulture.Calendar.GetWeekOfYear(
+                cur, System.Globalization.CalendarWeekRule.FirstFourDayWeek, DayOfWeek.Monday);
+
+            return new[]
+            {
+                new Row("Local 本地时间", cur.ToString("yyyy-MM-dd HH:mm:ss"), Hi: true,
+                        Hint: "yyyy-MM-dd HH:mm:ss（本地挂钟时间）"),
+                new Row("UTC 协调世界时", utc.ToString("yyyy-MM-dd HH:mm:ss"), Hi: true,
+                        Hint: "同一时刻的 UTC 表示"),
+                new Row("ISO 8601", cur.ToString("yyyy-MM-ddTHH:mm:ss") + OffsetLabel, Wide: true,
+                        Hint: "带时区偏移的标准交换格式，推荐用于 API / 日志", Css: "v-iso"),
+                new Row("Unix 秒", dto.ToUnixTimeSeconds().ToString(),
+                        Hint: "1970-01-01T00:00:00Z 起算"),
+                new Row("Unix 毫秒", dto.ToUnixTimeMilliseconds().ToString(),
+                        Hint: "JS Date.now() 同单位"),
+                new Row("C# Ticks", cur.Ticks.ToString("N0"),
+                        Hint: "0001-01-01 起算，1 tick = 100 ns（不受时区影响）"),
+                new Row("星期 Weekday", ZhDow[(int)cur.DayOfWeek],
+                        Hint: $"ISO 8601 周序：第 {week} 周"),
+            };
+        }
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = value;
+        }
+        catch
+        {
+            copied = "";
+        }
+    }
 }

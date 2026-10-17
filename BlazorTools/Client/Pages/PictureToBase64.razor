@@ -1,49 +1,165 @@
 ﻿@page "/pictureToBase64"
-<h3>Img转base64</h3>
-<InputFile @ref="@inputFile" OnChange="@LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp" />
-<div class="input-group mb-3">
-    <input @bind-value="@convertResult" type="text" class="form-control" placeholder="img base64 data">
-    <button type="button" class="btn btn-primary" onclick="@btnClick">预览</button>
+@inject IJSRuntime JS
+
+<PageTitle>Img 转 Base64 · BlazorTools</PageTitle>
+
+<h3>Img转Base64</h3>
+
+<p class="page-note">
+    把图片转成可直接内嵌的 <code>data:image/xxx;base64,…</code> Data URI。
+    读取与编码都在浏览器本地完成，<b>图片不会上传到任何服务器</b>。
+</p>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">选择图片</span>
+        <span class="panel-sub">单次最大 @(MaxBytes / 1024 / 1024) MB</span>
+    </div>
+
+    <div class="file-pick">
+        <InputFile OnChange="LoadFiles" accept="image/x-png,image/gif,image/jpeg,image/bmp,image/webp,image/svg+xml" />
+        @if (busy)
+        {
+            <span class="spin">读取中</span>
+        }
+    </div>
 </div>
-<img src="@convertResult" />
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(dataUri))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">预览 Preview</span>
+            <span class="panel-sub">@fileName</span>
+            <span class="panel-tools">
+                <a class="chip-btn" href="@dataUri" download="@fileName" title="下载原图">下载</a>
+            </span>
+        </div>
+
+        <div class="preview-box">
+            <img src="@dataUri" alt="@fileName" />
+        </div>
+
+        <div class="stat-strip">
+            <span class="stat-chip">原始大小 <b>@Kb(fileSize)</b></span>
+            <span class="stat-chip">Data URI <b>@Kb((long)dataUri.Length)</b></span>
+            <span class="stat-chip">膨胀 <b>@(fileSize > 0 ? (dataUri.Length / (double)fileSize).ToString("0.00") + "×" : "—")</b></span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">Data URI</span>
+            <span class="panel-tools">
+                <button type="button" class="copy-btn" title="复制 Data URI" aria-label="复制 Data URI"
+                        @onclick='async () => await Copy(dataUri)'>@(copied ? "✓" : "⧉")</button>
+            </span>
+        </div>
+
+        <div class="out-box v-uri">@dataUri</div>
+
+        <div class="btn-row">
+            <button type="button" class="btn btn-primary" @onclick='async () => await Copy(dataUri)'>复制 Data URI</button>
+            <button type="button" class="btn" @onclick="Clear">清空</button>
+        </div>
+    </div>
+}
+else if (!busy)
+{
+    <div class="preview-box">
+        <span class="preview-empty">尚未选择图片</span>
+    </div>
+}
 
 @code {
-    async Task btnClick(EventArgs e)
-    {
-        StateHasChanged();
-    }
+    private const long MaxBytes = 32L * 1024 * 1024;
 
+    private string dataUri = "";
+    private string fileName = "";
+    private long fileSize = 0;
+    private bool busy = false;
+    private bool copied = false;
+    private string? error = null;
 
-    private InputFile? inputFile;
-    private List<IBrowserFile> loadedFiles = new();
-    private bool isLoading;
-    private string convertResult { get; set; } = "";
-    private int maxAllowedFiles = 3;
+    private static string Kb(long bytes) =>
+        bytes >= 1024 * 1024 ? (bytes / 1024.0 / 1024).ToString("0.00") + " MB"
+                             : (bytes / 1024.0).ToString("0.0") + " KB";
+
     private async Task LoadFiles(InputFileChangeEventArgs e)
     {
-        isLoading = true;
-        loadedFiles.Clear();
+        error = null;
+        copied = false;
+        busy = true;
 
-        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        try
         {
-            try
+            var file = e.File;
+            if (file.Size > MaxBytes)
             {
-                if (file.ContentType.IndexOf("image") >= 0)
-                {
-                    var stream = file.OpenReadStream(200000000);
-                    var ext = System.IO.Path.GetExtension(file.Name).Substring(1);
-                    byte[] buf = new byte[stream.Length];
-                    await stream.ReadAsync(buf);
-                    convertResult = "data:image/" + ext + ";base64," + Convert.ToBase64String(buf);
-                }
-                loadedFiles.Add(file);
+                error = $"文件太大：{Kb(file.Size)}，超过上限 {Kb(MaxBytes)}。";
+                ClearCore();
+                return;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-        }
 
-        isLoading = false;
+            if (!file.ContentType.StartsWith("image", StringComparison.OrdinalIgnoreCase))
+            {
+                error = $"“{file.Name}”不是图片（ContentType = {file.ContentType}）。";
+                ClearCore();
+                return;
+            }
+
+            await using var stream = file.OpenReadStream(MaxBytes);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            var buf = ms.ToArray();
+            fileName = file.Name;
+            fileSize = file.Size;
+            dataUri = "data:" + file.ContentType + ";base64," + Convert.ToBase64String(buf);
+        }
+        catch (Exception ex)
+        {
+            error = "读取失败：" + ex.Message;
+            ClearCore();
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    private void ClearCore()
+    {
+        dataUri = "";
+        fileName = "";
+        fileSize = 0;
+    }
+
+    private void Clear()
+    {
+        ClearCore();
+        error = null;
+        copied = false;
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = true;
+        }
+        catch
+        {
+            copied = false;
+        }
     }
 }

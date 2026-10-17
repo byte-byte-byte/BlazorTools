@@ -1,42 +1,176 @@
 ﻿@page "/rsaTools"
 @inject IJSRuntime JS
+
+<PageTitle>RSA 加密解密 · BlazorTools</PageTitle>
+
 <h3>Rsa加密解密</h3>
-<div class="input-group mb-3">
-    <input @bind-value="@ip_KeyLen" type="text" class="form-control" placeholder="输入密钥长度">
-    <button type="button" class="btn btn-primary" onclick="@btnClick">生成</button>
-</div>
-<div class="row">
-    <div class="col-md-6">
-       <label>公钥:              </label><br />
-       <textarea style="width:100%;" @bind="@pubKey" ></textarea>
 
-        <div class="input-group mb-3">
-            <input @bind-value="@ip_EStr" type="text" class="form-control" placeholder="输入要加密内容">
-            <button type="button" class="btn btn-primary" onclick="@btnEClick">使用公钥加密</button>
-        </div>
-        
+<p class="page-note">
+    在浏览器本地生成 RSA 密钥对并做加解密（PKCS#1 v1.5 填充）。
+    密钥与明文都<b>不出本机</b>；2048 位及以上更安全，但生成耗时会明显变长。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">密钥生成</span>
+        <span class="panel-sub">公私钥 PEM 格式</span>
     </div>
-    <div class="col-md-6">
-        <label>私钥</label>
-        <textarea style="width:100%;" @bind="@prvKey"></textarea>
-        
-        <div class="input-group mb-3">
-            <input @bind-value="@ip_DStr" type="text" class="form-control" placeholder="输入要解密内容">
-            <button type="button" class="btn btn-primary" onclick="@btnDClick">使用私钥解密</button>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="rsa-len">密钥长度 (bit)</label>
+            <input id="rsa-len" class="form-control" type="number" min="512" step="256"
+                   autocomplete="off" @bind="keyLen" @bind:event="oninput" />
         </div>
-       
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">常用长度</span>
+        @foreach (var len in KeyLens)
+        {
+            <button type="button" class="chip-btn @(keyLen == len ? "is-on" : null)"
+                    title="@KeyHint(len)"
+                    @onclick="() => keyLen = len">@len</button>
+        }
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="GenKey" disabled="@busy">
+            @(busy ? "生成中…" : "生成密钥对")
+        </button>
+    </div>
+
+    @if (busy)
+    {
+        <div class="stat-strip"><span class="spin">正在生成 @keyLen 位密钥</span></div>
+    }
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(pubKey) || !string.IsNullOrEmpty(prvKey))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">密钥对 Key pair</span>
+        </div>
+
+        <div class="io-pair">
+            <div class="pane">
+                <div class="pane-head">
+                    <span class="pane-title">公钥 Public key</span>
+                    <span class="pane-tools">
+                        <button type="button" class="copy-btn" title="复制公钥" aria-label="复制公钥"
+                                @onclick='async () => await Copy(pubKey, "pub")'>@Mark("pub")</button>
+                    </span>
+                </div>
+                <div class="pane-body">
+                    <textarea @bind="pubKey" @bind:event="oninput" placeholder="生成后可手动粘贴外部公钥"></textarea>
+                </div>
+            </div>
+
+            <div class="io-arrow" aria-hidden="true">⇅</div>
+
+            <div class="pane">
+                <div class="pane-head">
+                    <span class="pane-title">私钥 Private key</span>
+                    <span class="pane-tools">
+                        <button type="button" class="copy-btn" title="复制私钥" aria-label="复制私钥"
+                                @onclick='async () => await Copy(prvKey, "prv")'>@Mark("prv")</button>
+                    </span>
+                </div>
+                <div class="pane-body">
+                    <textarea @bind="prvKey" @bind:event="oninput" placeholder="生成后可手动粘贴外部私钥（PKCS#8）"></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">加解密 Encrypt / Decrypt</span>
+        <span class="panel-sub">结果统一输出到下方</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="rsa-plain">明文 Plain text</label>
+            <input id="rsa-plain" class="form-control" type="text" autocomplete="off"
+                   placeholder="要加密的内容" @bind="plainText" @bind:event="oninput" />
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Encrypt">用公钥加密 →</button>
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="rsa-cipher">密文 Cipher (Base64)</label>
+            <input id="rsa-cipher" class="form-control" type="text" autocomplete="off" spellcheck="false"
+                   placeholder="要解密的内容" @bind="cipherText" @bind:event="oninput" />
+            <div class="btn-row">
+                <button type="button" class="btn btn-primary" disabled="@busy" @onclick="Decrypt">← 用私钥解密</button>
+            </div>
+        </div>
     </div>
 </div>
 
-<div>
-    <textarea id="resCalc" style="width:100%;" @bind="@res_RsaCalc"></textarea>
-    <button class="btn btn-primary" onclick="@btnCClick">复制到剪贴板</button>
-    <button class="btn btn-primary" onclick="@btnC2Click">复制到待解密区</button>
-</div>
+@if (!string.IsNullOrEmpty(result))
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">结果 Result</span>
+            <span class="panel-tools">
+                <button type="button" class="copy-btn" title="复制结果" aria-label="复制结果"
+                        @onclick='async () => await Copy(result, "res")'>@Mark("res")</button>
+            </span>
+        </div>
 
+        <div class="out-box v-rsa">@result</div>
+
+        <div class="btn-row">
+            <button type="button" class="btn" @onclick='() => { cipherText = result; }'>填到待解密区</button>
+            <button type="button" class="btn" @onclick='() => { plainText = result; }'>填到待加密区</button>
+            <button type="button" class="btn" @onclick="ClearResult">清空结果</button>
+        </div>
+
+        <div class="stat-strip">
+            <span class="stat-chip">结果 <b>@Len(result)</b> 字符</span>
+        </div>
+    </div>
+}
 
 @code {
-    //private IJSObjectReference module;
+    private static readonly int[] KeyLens = { 1024, 2048, 3072, 4096 };
+
+    private string pubKey = "";
+    private string prvKey = "";
+    private string plainText = "";
+    private string cipherText = "";
+    private string result = "";
+    private int keyLen = 2048;
+    private bool busy = false;
+    private string? error = null;
+    private string copied = "";
+
+    private string Mark(string key) => copied == key ? "✓" : "⧉";
+
+    private static int Len(string? s) => s?.Length ?? 0;
+
+    private static string KeyHint(int len) => len switch
+    {
+        1024 => "1024 位：生成快，已不推荐用于新系统",
+        2048 => "2048 位：当前通用下限",
+        3072 => "3072 位：更长的安全寿命",
+        4096 => "4096 位：安全但生成最慢（可能要十几秒）",
+        _ => len + " 位",
+    };
+
     static string rsaScriptInit()
     {
         return $@"
@@ -111,7 +245,6 @@ function copyToClipboard(eleID){{
 }}
 
 ";
-
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -122,58 +255,105 @@ function copyToClipboard(eleID){{
             string scriptContent;
             using (var stream = this.GetType().Assembly.GetManifestResourceStream(this.GetType().Assembly.GetName().Name + ".Pages.RsaTools.razor.js"))
             {
-                using (var sr = new System.IO.StreamReader(stream))
+                using (var sr = new System.IO.StreamReader(stream!))
                     scriptContent = await sr.ReadToEndAsync();
-            }            
-            //module = await JS.InvokeAsync<IJSObjectReference>("import", "data:text/javascript;base64," + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(scriptContent)));
+            }
+
             await JS.InvokeVoidAsync("eval", scriptContent);
             await JS.InvokeVoidAsync("eval", rsaScriptInit());
         }
+    }
 
-    }
-    string res_RsaCalc { get; set; }//加密解密结果
-    string ip_EStr{ get; set; }
-    string ip_DStr { get; set; }
-    string ip_KeyLen { get; set; } = "1024";
-    string prvKey { get; set; } = "";
-    string pubKey { get; set; } = "";
-    async Task btnClick(EventArgs e)
+    private async Task GenKey()
     {
-        string[] keyArray;
-        if (int.TryParse(ip_KeyLen, out int len))
+        error = null;
+        copied = "";
+        busy = true;
+        StateHasChanged();
+
+        try
         {
-            keyArray = await JS.InvokeAsync<string[]>("rsaCreatekey", len);
+            int len = keyLen;
+            if (len < 512) len = 512;
+
+            var keys = await JS.InvokeAsync<string[]>("rsaCreatekey", len);
+            if (keys is { Length: > 1 })
+            {
+                prvKey = keys[0] ?? "";
+                pubKey = keys[1] ?? "";
+            }
+            else
+            {
+                error = "密钥生成失败：JS 端没有返回密钥对。";
+            }
         }
-        else
+        catch (Exception ex)
         {
-            keyArray = await JS.InvokeAsync<string[]>("rsaCreatekey", 1024);
-            ip_KeyLen = "1024";   
+            error = "密钥生成失败：" + ex.Message;
         }
-        if (keyArray?.Length > 1)
-        { 
-            prvKey = keyArray[0];
-            pubKey = keyArray[1];
+        finally
+        {
+            busy = false;
         }
-        StateHasChanged();
     }
-    async Task btnEClick(EventArgs e)
-    {       
-        res_RsaCalc  = await JS.InvokeAsync<string>("rsaEncrypt", pubKey, ip_EStr);
-        StateHasChanged();
-    }
-    async Task btnDClick(EventArgs e)
+
+    private async Task Encrypt()
     {
-        res_RsaCalc = await JS.InvokeAsync<string>("rsaDecrypt", prvKey, ip_DStr);
-        StateHasChanged();
+        error = null;
+        copied = "";
+        busy = true;
+
+        try
+        {
+            result = await JS.InvokeAsync<string>("rsaEncrypt", pubKey, plainText) ?? "";
+        }
+        catch (Exception ex)
+        {
+            error = "加密失败（检查公钥是否有效、明文是否为空）：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
     }
-    async Task btnCClick(EventArgs e)
+
+    private async Task Decrypt()
     {
-        await JS.InvokeVoidAsync("copyToClipboard", "resCalc");
+        error = null;
+        copied = "";
+        busy = true;
+
+        try
+        {
+            result = await JS.InvokeAsync<string>("rsaDecrypt", prvKey, cipherText) ?? "";
+        }
+        catch (Exception ex)
+        {
+            error = "解密失败（检查私钥是否匹配、密文是否完整）：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+        }
     }
-    Task btnC2Click(EventArgs e)
+
+    private void ClearResult()
     {
-        ip_DStr = res_RsaCalc;
-        StateHasChanged();
-        return Task.CompletedTask;
+        result = "";
+        copied = "";
+        error = null;
+    }
+
+    private async Task Copy(string value, string key)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = key;
+        }
+        catch
+        {
+            copied = "";
+        }
     }
 }

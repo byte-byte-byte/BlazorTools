@@ -1,4 +1,4 @@
-﻿.color-table {
+.color-table {
     width: 100%;
     border-collapse: collapse
 }
@@ -11,7 +11,7 @@
 
 .color-table-head .color-table-cell {
     height: 2.5rem;
-    color: var(--color-gray);
+    color: var(--txt-3);
     font-size: 0.75rem;
     text-align: left;
     text-transform: uppercase;
@@ -29,7 +29,7 @@
     width: 100%;
     border-width: 1px 0 0 0;
     border-style: solid;
-    border-color: var(--color-gray--border)
+    border-color: var(--line-2)
 }
 
 .color-table-cell {
@@ -128,7 +128,7 @@
 }
 
 .color-table-color[data-hex="#FFFFFF"] {
-    border: 1px solid var(--color-gray--border)
+    border: 1px solid var(--line-2)
 }
 
 article.color-names .color-table-row:first-child {
@@ -715,3 +715,29 @@ input.clr-color {
 .clr-pill .clr-hue {
     margin-top: 20px;
 }
+
+/* ==========================================================================
+   ColorPicker · 页面补充（本文件在 csproj 里被声明成 EmbeddedResource，
+   不走 CSS 隔离，而是在运行时以 <style> 注入，所以下面的选择器是全局的）
+   —— 通用骨架在 wwwroot/css/theme.css 的「8.5 / 8.6 通用控件」段。
+   ========================================================================== */
+
+/* 取色输入框不必占满整行 */
+#ipColorPick {
+    max-width: 260px;
+    font-family: var(--font-mono);
+}
+
+/* 颜色表列多，窄屏横向滚动而不是把版面挤变形 */
+.table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.color-table { color: var(--txt); }
+
+    .color-table .color-table-cell { border-color: var(--line); }
+
+    .color-table .color-table-row:hover .color-table-cell {
+        background: rgba(var(--accent-rgb), .06);
+    }

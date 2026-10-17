@@ -1,131 +1,293 @@
 ﻿@page "/floatconversion"
+@using System.Buffers.Binary
+@inject IJSRuntime JS
+
+<PageTitle>浮点转换 · BlazorTools</PageTitle>
+
 <h3>浮点转换</h3>
-<label class="group-text">浮点数:</label>
-<div class="input-group mb-3">    
-    <input @bind-value="@ip_float" type="text" class="form-control" placeholder="请输入浮点数">
-    <button type="button" class="btn btn-primary" onclick="@btn_ConvertToArray">转换</button>
-</div>
-<label class="group-text">浮点数组(小端模式):</label>
-<div class="input-group mb-3">
-    <input @bind-value="@ip_barray" type="text" class="form-control" placeholder="请输入float对应的数组">
-    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray,2);})">转换</button>
-</div>
-<label class="group-text">Int数组(小端模式):</label>
-<div class="input-group mb-3">
-    <input @bind-value="@ip_barray_int" type="text" class="form-control" placeholder="请输入int32对应的数组">
-    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray_int,0);})">转换</button>
-</div>
-<label class="group-text">UInt数组(小端模式):</label>
-<div class="input-group mb-3">
-    <input @bind-value="@ip_barray_uint" type="text" class="form-control" placeholder="请输入uin32对应的数组">
-    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray_uint,1);})">转换</button>
+
+<p class="page-note">
+    IEEE754 浮点数与十六进制字节互转。字节数组的写法是两位一组十六进制，例如 <code>00 00 80 3F</code>。
+    注意：<code>BitConverter</code> 取的是<b>当前运行环境的字节序</b>（WASM 与 x86 一样是<b>小端</b>），所以要和别的平台对齐时请留意高低位的排列。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">十进制 → 字节</span>
+        <span class="panel-sub">@(BitConverter.IsLittleEndian ? "Little-Endian 输出" : "Big-Endian 输出")</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="fc-num">浮点数</label>
+            <input id="fc-num"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="例如 12.5"
+                   @bind="numText"
+                   @bind:event="oninput"
+                   @onkeydown='e => { if (e.Key == "Enter") ToBytes(); }' />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">常用值</span>
+        @foreach (var d in NumDemos)
+        {
+            <button type="button" class="chip-btn @(numText == d.Value ? "is-on" : null)"
+                    title="@d.Value"
+                    @onclick="() => UseNum(d.Value)">@d.Name</button>
+        }
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="ToBytes">转成字节数组</button>
+        <button type="button" class="btn" @onclick="Clear">清空</button>
+    </div>
 </div>
 
-<label class="group-text">Double数组(小端模式):</label>
-<div class="input-group mb-3">
-    <input @bind-value="@ip_barray_double" type="text" class="form-control" placeholder="请输入double对应的数组">
-    <button type="button" class="btn btn-primary" onclick="@(()=>{btn_ConvertToInt(ip_barray_double,3);})">转换</button>
+@if (numError is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@numError</span>
+    </div>
+}
+
+@if (bytesRows is not null)
+{
+    <div class="metric-grid">
+        @foreach (var row in bytesRows)
+        {
+            <div class="metric @(row.Hi ? "is-hi" : null)">
+                <div class="metric-k">@row.K</div>
+                <div class="metric-v v-hex">@row.V</div>
+                <div class="metric-hint">@row.Hint</div>
+                <button type="button"
+                        class="copy-btn @(copied == row.V ? "is-done" : null)"
+                        title="复制 @row.K"
+                        aria-label="复制 @row.K"
+                        @onclick="async () => await Copy(row.V)">@(copied == row.V ? "✓" : "⧉")</button>
+            </div>
+        }
+    </div>
+}
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">字节 → 十进制</span>
+       
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="fc-bytes">Float数组(小端模式)</label>
+            <input id="fc-bytes"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="例如: 00 00 48 41"
+                   @bind="byteText"
+                   @bind:event="oninput"
+                   @onkeydown='e => { if (e.Key == "Enter") ToNumber(); }' />
+        </div>
+    </div>
+
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="ToNumber">转成数值</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip">解析出 <b>@ParsedBytes</b> 字节</span>
+        @if (BigExists)
+        {
+            <span class="stat-chip">大端序改写 <b>@BigEndianHex</b></span>
+        }
+    </div>
 </div>
+
+@if (numRows is not null)
+{
+    <div class="metric-grid">
+        @foreach (var row in numRows)
+        {
+            <div class="metric @(row.Hi ? "is-hi" : null)">
+                <div class="metric-k">@row.K</div>
+                <div class="metric-v v-hex">@row.V</div>
+                <div class="metric-hint">@row.Hint</div>
+                <button type="button"
+                        class="copy-btn @(copied == row.V ? "is-done" : null)"
+                        title="复制 @row.K"
+                        aria-label="复制 @row.K"
+                        @onclick="async () => await Copy(row.V)">@(copied == row.V ? "✓" : "⧉")</button>
+            </div>
+        }
+    </div>
+}
+
+@if (byteError is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@byteError</span>
+    </div>
+}
 
 @code {
+    private string numText = "";
+    private string byteText = "";
+    private Row[]? bytesRows = null;
+    private Row[]? numRows = null;
+    private string? numError = null;
+    private string? byteError = null;
+    private string copied = "";
+    private int parsedBytes = 0;
 
-    string ip_float{ get; set; }
-    string ip_barray { get; set; }
-    string ip_barray_int{ get; set; }
-    string ip_barray_uint { get; set; }
-    string ip_barray_double { get; set; }
-    void btn_ConvertToArray(EventArgs e)
+    private int ParsedBytes => parsedBytes;
+    private bool BigExists => BigBytes.Length > 0;
+
+    private sealed record Row(string K, string V, bool Hi, string Hint);
+
+    private sealed record NumDemo(string Name, string Value);
+
+    private static readonly NumDemo[] NumDemos =
     {
-        ip_barray = "";
-        ip_barray_int = "";
-        ip_barray_uint = "";
-        ip_barray_double = "";
-        if (double.TryParse(ip_float, out double val_double))
-        {
-            var bArray = BitConverter.GetBytes(val_double);
-            foreach (var b in bArray)
-                ip_barray_double += b.ToString("X2") + " ";
+        new("12.5", "12.5"),
+        new("-1", "-1"),
+        new("3.14159", "3.14159"),
+        new("1024", "1024"),
+    };
 
-            float val = (float)val_double;
-            bArray = BitConverter.GetBytes(val);
-            foreach (var b in bArray)
-                ip_barray += b.ToString("X2") + " ";
+    private byte[] BigBytes { get; set; } = Array.Empty<byte>();
 
-            bArray = BitConverter.GetBytes((int)val);
-            foreach (var b in bArray)
-                ip_barray_int += b.ToString("X2") + " ";
+    private string BigEndianHex => Hex(BigBytes);
 
-            bArray = BitConverter.GetBytes((int)val);
-            foreach (var b in bArray)
-                ip_barray_uint += b.ToString("X2") + " ";
-
-
-        }
-        else
-        {
-            ip_barray = "input err";
-            ip_barray_int = "input err";
-            ip_barray_uint = "input err";
-            ip_barray_double = "input err";
-        }
-        StateHasChanged();
+    private void UseNum(string v)
+    {
+        numText = v;
+        numError = null;
+        copied = "";
+        bytesRows = null;
     }
-    void btn_ConvertToInt(string text,int CovType)
+
+    private static string Hex(byte[] bytes) =>
+        string.Join(" ", bytes.Select(b => b.ToString("X2")));
+
+    private void ToBytes()
     {
-        ip_float = "input err";
-        var bArray = text.Split(' ');
-        List<byte> bLst = new List<byte>();
-        foreach (var b in bArray)
+        numError = null;
+        copied = "";
+        bytesRows = null;
+
+        var s = (numText ?? "").Trim();
+        if (s.Length == 0)
         {
-            try
+            numError = "请输入一个十进制数字。";
+            return;
+        }
+
+        if (!double.TryParse(s, out double val))
+        {
+            numError = $"“{s}” 不是合法的数字。";
+            return;
+        }
+
+        bytesRows = new[]
+        {
+            new Row("Float32 Single",  Hex(BitConverter.GetBytes((float)val)),  true,  "4 字节 IEEE754 单精度"),
+            new Row("Float64 Double",  Hex(BitConverter.GetBytes(val)),         true,  "8 字节 IEEE754 双精度"),
+            new Row("Int32",           Hex(BitConverter.GetBytes((int)val)),    false, "小数部分被截断（不是四舍五入）"),
+            new Row("UInt32",          Hex(BitConverter.GetBytes((uint)(long)val)), false, "负数会按补码回卷成很大的正数"),
+        };
+    }
+
+    private static byte[] ParseBytes(string text)
+    {
+        var s = (text ?? "").Trim();
+        s = s.Replace("0x", "", StringComparison.OrdinalIgnoreCase)
+             .Replace("0X", "")
+             .Replace(',', ' ')
+             .Replace('-', ' ');
+
+        var list = new List<byte>();
+        foreach (var token in s.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (byte.TryParse(token, System.Globalization.NumberStyles.HexNumber, null, out var b))
             {
-                var tmp = Convert.ToByte(b, 16);
-                bLst.Add(tmp);
+                list.Add(b);
             }
-            catch { }
         }
 
-        if(bLst.Count >= 4)
-        {
-            try {
-                switch (CovType)
-                {
-                    case 0:
-                        ip_float = BitConverter.ToInt32(bLst.ToArray()).ToString();
-                        break;
-                    case 1:
-                        ip_float = BitConverter.ToUInt32(bLst.ToArray()).ToString();
-                        break;
-                    case 2:
-                        ip_float = BitConverter.ToSingle(bLst.ToArray()).ToString();
-                        break;
-                    case 3:
-                        ip_float = BitConverter.ToDouble(bLst.ToArray()).ToString();
-                        break;
-                }
-            }
-            catch { }
-        }
-        StateHasChanged();
+        return list.ToArray();
     }
-    //void btn_ConvertToFloat(EventArgs e)
-    //{
-    //    ip_float = "input err";
-    //    var bArray = ip_barray.Split(' ');
-    //    List<byte> bLst = new List<byte>();
-    //    foreach(var b in bArray)
-    //    {
-    //        try { var tmp = Convert.ToByte(b, 16);
-    //            bLst.Add(tmp);
-    //        }
-    //        catch { }
-    //    }
-    //    if(bLst.Count>=4)
-    //    {
-    //        try { ip_float = BitConverter.ToSingle(bLst.ToArray()).ToString(); }
-    //        catch { }
-    //    }
-    //    StateHasChanged();
 
-    //}
+    private void ToNumber()
+    {
+        byteError = null;
+        copied = "";
+        parsedBytes = 0;
+        BigBytes = Array.Empty<byte>();
+        numRows = null;
+
+        var s = (byteText ?? "").Trim();
+        if (s.Length == 0)
+        {
+            byteText = "00 00 48 41";
+            s = byteText;   // 空输入按水印示例解析
+        }
+        var buf = ParseBytes(s);
+        parsedBytes = buf.Length;
+        if (buf.Length == 0)
+        {
+            byteError = "没有解析出任何字节，请填两位一组的十六进制，例如 00 00 48 41。";
+            return;
+        }
+
+        BigBytes = buf.Reverse().ToArray();
+
+        var rows = new List<Row>();
+        void Add(string k, int need, bool hi, string hint, Func<byte[], string> f)
+        {
+            rows.Add(buf.Length >= need
+                ? new Row(k, f(buf), hi, hint)
+                : new Row(k, "—", hi, $"字节不足：需 {need} 字节，仅 {buf.Length} 字节"));
+        }
+
+        Add("Float32 Single", 4, true,  "4 字节 IEEE754 单精度",         b => BitConverter.ToSingle(b, 0).ToString("R"));
+        Add("Int32",          4, false, "有符号 32 位整型（前 4 字节）", b => BitConverter.ToInt32(b, 0).ToString());
+        Add("UInt32",         4, false, "无符号 32 位整型（前 4 字节）", b => BitConverter.ToUInt32(b, 0).ToString());
+        Add("Float64 Double", 8, true,  "8 字节 IEEE754 双精度",         b => BitConverter.ToDouble(b, 0).ToString("R"));
+
+        numRows = rows.ToArray();
+    }
+
+    private void Clear()
+    {
+        numText = "";
+        byteText = "";
+        bytesRows = null;
+        numRows = null;
+        numError = null;
+        byteError = null;
+        copied = "";
+        parsedBytes = 0;
+        BigBytes = Array.Empty<byte>();
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = value;
+        }
+        catch
+        {
+            copied = "";
+        }
+    }
 }

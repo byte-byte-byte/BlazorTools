@@ -1,0 +1,15 @@
+/* ==========================================================================
+   Counter · 页面专属样式（CSS 隔离，作用域仅限本组件）
+   —— 通用骨架在 wwwroot/css/theme.css 的「8.5 / 8.6 通用控件」段。
+   ========================================================================== */
+
+/* 只有一个结果卡时不要两栏留空，占满整行 */
+.metric-grid.is-single { grid-template-columns: minmax(0, 1fr); }
+
+/* 计数值是主角，字号放大 + 表格数字避免位数变化时抖动 */
+.v-count {
+    font-size: 2.4rem;
+    line-height: 1.2;
+    color: #fff;
+    font-variant-numeric: tabular-nums;
+}

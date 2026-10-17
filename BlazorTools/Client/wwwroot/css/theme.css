@@ -5,6 +5,8 @@
    3. 背景特效层 (FX)          4. 布局骨架 (Page / Sidebar / Main)
    5. 导航 (Brand / Nav)       6. HUD 顶栏与页脚
    7. 卡片 (Hero / Box / Panel) 8. 表单与按钮
+   8.5 通用控件：字段栅格 / 胶囊按钮 / 结果卡片 / 提示条
+   8.6 通用控件 II：面板标题 / 双栏 IO / 输出框 / 文件选择 / 预览框 / 复选组 / 键值表
    9. 表格 / 链接 / 其它       10. 启动动画 / 错误 UI / 响应式
    --------------------------------------------------------------------------
    换色：给 <html> 加 data-accent="violet" | "mint" | "amber" 即可换主色。
@@ -1323,6 +1325,331 @@ hr {
 @media (max-width: 560px) {
     .form-grid { grid-template-columns: 1fr; }
     .metric-grid { grid-template-columns: 1fr; }
+}
+
+/* ============ 8.6 通用控件 II：面板标题 / 双栏 IO / 输出框 / 文件与预览 / 复选组 / 键值表 ============
+   —— 同样是全局可复用件，判据是「至少两个工具页用得上」：
+      .panel-head / .panel-title / .panel-sub / .panel-tools   面板标题行
+      .pane / .pane-head / .pane-title / .pane-tools / .pane-body   内容块（双栏布局的单元）
+      .io-pair        双栏 输入 → 输出 栅格（窄屏自动堆叠）
+      .io-arrow       双栏之间的方向指示
+      .out-box        等宽结果输出区（pre / div，配 .copy-btn 使用）
+      .file-pick      InputFile 美化容器
+      .preview-box    图片 / 画布预览框（棋盘格底，透明通道可见）
+      .preview-empty  预览框空态提示
+      .check-row / .check-chip   复选胶囊组（内含隐藏 checkbox，.is-on 为选中）
+      .kv-list / .kv-item / .kv-k / .kv-v    键值明细表
+      .spin           加载指示器
+      .stat-strip / .stat-chip    轻量统计条
+   —— 某个页面要在此之上做专属调整，写在自己的 Xxx.razor.css（CSS 隔离）里。
+   ========================================================================== */
+
+/* ---- 面板标题行 ---- */
+.panel-head {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    margin-bottom: .95rem;
+    padding-bottom: .7rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.panel-title {
+    font: 600 10px/1.4 var(--font-mono);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+.panel-sub { color: var(--txt-3); font-size: .78rem; }
+.panel-tools { margin-left: auto; display: flex; align-items: center; gap: .45rem; }
+
+/* ---- 内容块 ---- */
+.pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: .85rem .9rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: rgba(4, 7, 14, .5);
+    transition: border-color .2s ease;
+}
+
+    .pane:focus-within { border-color: rgba(var(--accent-rgb), .45); }
+
+.pane-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .6rem; }
+
+.pane-title {
+    font: 600 10px/1.4 var(--font-mono);
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--txt-3);
+}
+
+.pane-tools { margin-left: auto; display: flex; align-items: center; gap: .4rem; }
+
+.pane-body {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+}
+
+    .pane-body textarea,
+    .pane-body .form-control { width: 100%; }
+    .pane-body textarea { flex: 1 1 auto; min-height: 150px; }
+
+/* ---- 双栏 IO ---- */
+.io-pair {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: .8rem;
+}
+
+.io-arrow {
+    display: grid;
+    place-items: center;
+    color: var(--accent);
+    font: 600 16px/1 var(--font-mono);
+    opacity: .65;
+    user-select: none;
+}
+
+/* ---- 输出框 ---- */
+.out-box {
+    position: relative;
+    padding: .8rem .9rem;
+    padding-right: 2.7rem; /* 给右上角 .copy-btn 留位 */
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    background: rgba(4, 7, 14, .78);
+    color: var(--txt);
+    font-family: var(--font-mono);
+    font-size: .92rem;
+    line-height: 1.75;
+    word-break: break-all;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+    .out-box.is-empty { color: var(--txt-3); }
+    .out-box.is-lg { font-size: 1.05rem; letter-spacing: .02em; }
+
+/* ---- 文件选择 ---- */
+.file-pick {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    padding: .8rem .9rem;
+    border: 1px dashed var(--line-2);
+    border-radius: var(--r-sm);
+    background: rgba(var(--accent-rgb), .04);
+    transition: border-color .18s ease, background .18s ease;
+}
+
+    .file-pick:hover, .file-pick:focus-within {
+        border-color: rgba(var(--accent-rgb), .6);
+        background: rgba(var(--accent-rgb), .08);
+    }
+
+    .file-pick input[type="file"] {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--txt-2);
+        font-family: var(--font-mono);
+        font-size: .8rem;
+    }
+
+    .file-pick input[type="file"]::file-selector-button {
+        margin-right: .75rem;
+        padding: .34rem .8rem;
+        border: 1px solid var(--line-2);
+        border-radius: 6px;
+        background: rgba(255, 255, 255, .04);
+        color: var(--txt);
+        font: 600 11px/1.5 var(--font-mono);
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: color .16s ease, border-color .16s ease, background .16s ease;
+    }
+
+        .file-pick input[type="file"]::file-selector-button:hover {
+            color: #fff;
+            border-color: rgba(var(--accent-rgb), .6);
+            background: rgba(var(--accent-rgb), .14);
+        }
+
+/* ---- 预览框 ---- */
+.preview-box {
+    display: grid;
+    place-items: center;
+    min-height: 170px;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    /* 棋盘格底：透明 PNG / ICO 也能看清边界 */
+    background:
+        repeating-conic-gradient(rgba(255, 255, 255, .05) 0% 25%, transparent 0% 50%) 0 0 / 18px 18px,
+        rgba(4, 7, 14, .6);
+    overflow: hidden;
+}
+
+    .preview-box img, .preview-box canvas { max-width: 100%; max-height: 320px; }
+
+.preview-empty {
+    font: 600 10px/1.7 var(--font-mono);
+    letter-spacing: .16em;
+    color: var(--txt-3);
+    text-transform: uppercase;
+    text-align: center;
+}
+
+/* ---- 复选胶囊组 ---- */
+.check-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+
+.check-chip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .3rem .7rem .3rem .55rem;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    background: rgba(255, 255, 255, .03);
+    color: var(--txt-2);
+    font: 600 11px/1.5 var(--font-mono);
+    letter-spacing: .06em;
+    cursor: pointer;
+    user-select: none;
+    transition: color .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+
+    .check-chip input { position: absolute; opacity: 0; pointer-events: none; }
+
+    .check-chip:hover {
+        color: #fff;
+        border-color: rgba(var(--accent-rgb), .5);
+        background: rgba(var(--accent-rgb), .1);
+    }
+
+    .check-chip.is-on {
+        color: #eafcff;
+        border-color: rgba(var(--accent-rgb), .6);
+        background: rgba(var(--accent-rgb), .15);
+        box-shadow: 0 0 14px rgba(var(--accent-rgb), .24);
+    }
+
+.check-chip .tick {
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    color: transparent;
+    font-size: .6rem;
+    line-height: 1;
+    transition: color .16s ease, background .16s ease, border-color .16s ease;
+}
+
+    .check-chip.is-on .tick {
+        color: var(--bg-0);
+        border-color: var(--accent);
+        background: var(--accent);
+    }
+
+/* ---- 键值明细表 ---- */
+.kv-list {
+    border: 1px solid var(--line);
+    border-radius: var(--r-sm);
+    overflow: hidden;
+}
+
+.kv-item {
+    display: grid;
+    grid-template-columns: minmax(92px, 165px) 1fr;
+    gap: .8rem;
+    padding: .55rem .85rem;
+    border-top: 1px solid var(--line);
+    background: rgba(4, 7, 14, .45);
+    transition: background .16s ease;
+}
+
+    .kv-item:first-child { border-top: 0; }
+    .kv-item:hover { background: rgba(var(--accent-rgb), .07); }
+
+.kv-k {
+    font: 600 10px/1.7 var(--font-mono);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--txt-3);
+}
+
+.kv-v {
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: .86rem;
+    color: var(--txt);
+    word-break: break-all;
+}
+
+    .kv-v.is-dim { color: var(--txt-3); }
+    .kv-v.is-err { color: var(--err); }
+
+/* ---- 加载指示 ---- */
+.spin {
+    display: inline-flex;
+    align-items: center;
+    gap: .5rem;
+    color: var(--accent);
+    font: 600 10px/1.4 var(--font-mono);
+    letter-spacing: .18em;
+    text-transform: uppercase;
+}
+
+    .spin::before {
+        content: "";
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(var(--accent-rgb), .25);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin-rot .8s linear infinite;
+    }
+
+@keyframes spin-rot { to { transform: rotate(360deg); } }
+
+html[data-motion="off"] .spin::before { animation: none; }
+
+/* ---- 轻量统计条 ---- */
+.stat-strip { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: .85rem; }
+
+.stat-chip {
+    padding: .2rem .62rem;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+    background: rgba(255, 255, 255, .03);
+    font: 600 10px/1.6 var(--font-mono);
+    letter-spacing: .1em;
+    color: var(--txt-3);
+    text-transform: uppercase;
+}
+
+    .stat-chip b { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 860px) {
+    .io-pair { grid-template-columns: 1fr; }
+    .io-arrow { padding: .1rem 0; transform: rotate(90deg); }
+}
+
+@media (max-width: 560px) {
+    .kv-item { grid-template-columns: 1fr; gap: .15rem; }
+    .panel-head { flex-wrap: wrap; }
+    .panel-tools { margin-left: 0; width: 100%; }
 }
 
 /* ============ 9. 链接 / 表格 / 其它 ============ */

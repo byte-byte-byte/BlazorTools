@@ -2,46 +2,76 @@
 @using BlazorTools.Shared
 @inject HttpClient Http
 
-<PageTitle>Weather forecast</PageTitle>
+<PageTitle>Weather forecast · BlazorTools</PageTitle>
 
-<h1>Weather forecast</h1>
+<h3>Weather forecast</h3>
 
-<p>This component demonstrates fetching data from the server.</p>
+<p class="page-note">
+    Blazor 模板自带的示例页，演示从 Server 项目拉取数据（<code>/WeatherForecast</code>）。
+    部署纯静态时会取不到数据，属正常现象。
+</p>
 
-@if (forecasts == null)
-{
-    <p><em>Loading...</em></p>
-}
-else
-{
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Temp. (C)</th>
-                <th>Temp. (F)</th>
-                <th>Summary</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var forecast in forecasts)
-            {
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">天气预报 Forecast</span>
+        <span class="panel-sub">GET /WeatherForecast</span>
+    </div>
+
+    @if (forecasts == null)
+    {
+        <span class="spin">Loading</span>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
                 <tr>
-                    <td>@forecast.Date.ToShortDateString()</td>
-                    <td>@forecast.TemperatureC</td>
-                    <td>@forecast.TemperatureF</td>
-                    <td>@forecast.Summary</td>
+                    <th>Date</th>
+                    <th>Temp. (C)</th>
+                    <th>Temp. (F)</th>
+                    <th>Summary</th>
                 </tr>
-            }
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                @foreach (var forecast in forecasts)
+                {
+                    <tr>
+                        <td>@forecast.Date.ToShortDateString()</td>
+                        <td>@forecast.TemperatureC</td>
+                        <td>@forecast.TemperatureF</td>
+                        <td>@forecast.Summary</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="stat-strip">
+            <span class="stat-chip">共 <b>@forecasts.Length</b> 条</span>
+        </div>
+    }
+</div>
+
+@if (loadError is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@loadError</span>
+    </div>
 }
 
 @code {
     private WeatherForecast[]? forecasts;
+    private string? loadError = null;
 
     protected override async Task OnInitializedAsync()
     {
-        forecasts = await Http.GetFromJsonAsync<WeatherForecast[]>("WeatherForecast");
+        try
+        {
+            forecasts = await Http.GetFromJsonAsync<WeatherForecast[]>("WeatherForecast");
+        }
+        catch (Exception ex)
+        {
+            loadError = "拉取失败：" + ex.Message;
+        }
     }
 }

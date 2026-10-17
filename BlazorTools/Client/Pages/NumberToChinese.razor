@@ -1,38 +1,191 @@
 ﻿@page "/numbertochinese"
 @using System.Text.RegularExpressions
+@inject IJSRuntime JS
+
+<PageTitle>数字转大写 · BlazorTools</PageTitle>
+
 <h3>数字转大写</h3>
 
+<p class="page-note">
+    把金额数字转成财务用中文大写（零 / 壹 / 贰 … 拾佰仟万亿）。支持两位小数，精确到<b>分</b>，
+    末尾为 <code>.00</code> 时自动以「整」收尾。全部在本地计算。
+</p>
 
-<div class="input-group">
-    <input class="form-control" @bind-value="@ipData" ></input>
-    <button class="btn btn-primary" >转换</button>
-</div>
-<label>@lbResult</label>
-@code {
-    string lbResult = "";
-    string _ipVal = "";
-    string ipData
-    {
-        get => _ipVal; set
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">金额</span>
+        <span class="panel-sub">输入即转，无需点按钮</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="ntc-num">数字</label>
+            <input id="ntc-num"
+                   class="form-control"
+                   type="text"
+                   inputmode="decimal"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="例如 1234.56"
+                   @bind="input"
+                   @bind:event="oninput" />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">示例</span>
+        @foreach (var v in Demos)
         {
-            _ipVal = value;
-            if (Decimal.TryParse(_ipVal, out Decimal number))
-            {
-                if (number == 0)
-                {
-                    lbResult = "零元整";
-                    return;
-                }
-                var s = number.ToString("#L#E#D#C#K#E#D#C#J#E#D#C#I#E#D#C#H#E#D#C#G#E#D#C#F#E#D#C#.0B0A");
-                var d = Regex.Replace(s, @"((?<=-|^)[^1-9]*)|((?'z'0)[0A-E]*((?=[1-9])|(?'-z'(?=[F-L\.]|$))))|((?'b'[F-L])(?'z'0)[0A-L]*((?=[1-9])|(?'-z'(?=[\.]|$))))", "${b}${z}");
-                var r = Regex.Replace(d, ".", m => "负元空零壹贰叁肆伍陆柒捌玖空空空空空空空分角拾佰仟万亿兆京垓秭穰"[m.Value[0] - '-'].ToString());
-                if (s.IndexOf("0B0A") >= 0)
-                    r = r + "整";
-                lbResult = r;
-            }
-            else
-                lbResult = "输入有误";
+            <button type="button" class="chip-btn @(input == v ? "is-on" : null)"
+                    title="@v"
+                    @onclick="() => UseDemo(v)">@v</button>
+        }
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn" @onclick="Clear">清空</button>
+    </div>
+
+    <div class="stat-strip">
+        <span class="stat-chip">整数位 <b>@IntDigits</b> 位</span>
+        <span class="stat-chip">小数位 <b>@DecDigits</b> 位</span>
+    </div>
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+else if (result.Length > 0)
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">大写金额</span>
+            <span class="panel-tools">
+                <button type="button" class="copy-btn" title="复制结果" aria-label="复制结果"
+                        @onclick='async () => await Copy(result)'>@(copied ? "✓" : "⧉")</button>
+            </span>
+        </div>
+        <div class="out-box is-lg v-rmb">@result</div>
+    </div>
+}
+
+@code {
+    private string result = "";
+    private string? error = null;
+    private bool copied = false;
+
+    private string _input = "";
+
+    private string input
+    {
+        get => _input;
+        set
+        {
+            _input = value;
+            copied = false;
+            Convert();
         }
     }
 
+    private static readonly string[] Demos = { "0", "1", "10.05", "1234.56", "100000000", "98765.43" };
+
+    private int IntDigits
+    {
+        get
+        {
+            var s = (input ?? "").Trim();
+            int dot = s.IndexOf('.');
+            if (dot >= 0) s = s[..dot];
+            return s.TrimStart('-').TrimStart('0').Length;
+        }
+    }
+
+    private int DecDigits
+    {
+        get
+        {
+            var s = (input ?? "").Trim();
+            int dot = s.IndexOf('.');
+            return dot >= 0 ? s.Length - dot - 1 : 0;
+        }
+    }
+
+    private void UseDemo(string v)
+    {
+        input = v;
+    }
+
+    private void Convert()
+    {
+        error = null;
+
+        var text = (input ?? "").Trim();
+        if (text.Length == 0)
+        {
+            result = "";
+            return;
+        }
+
+        if (!decimal.TryParse(text, out decimal number))
+        {
+            result = "";
+            error = "输入有误：请填数字，最多两位小数。";
+            return;
+        }
+
+        bool neg = number < 0;
+        if (neg)
+        {
+            number = Math.Abs(number);
+        }
+
+        // 超出 decimal 的精度范围后，万/亿进位不可靠，直接挡掉
+        if (number >= 1_0000_0000_0000_0000_0000_0000_0000m)
+        {
+            result = "";
+            error = "数值过大：已超出 decimal 可精确表示的范围。";
+            return;
+        }
+
+        if (number == 0)
+        {
+            result = "零元整";
+            return;
+        }
+
+        var s = number.ToString("#L#E#D#C#K#E#D#C#J#E#D#C#I#E#D#C#H#E#D#C#G#E#D#C#F#E#D#C#.0B0A");
+        var d = Regex.Replace(s, @"((?<=-|^)[^1-9]*)|((?'z'0)[0A-E]*((?=[1-9])|(?'-z'(?=[F-L\.]|$))))|((?'b'[F-L])(?'z'0)[0A-L]*((?=[1-9])|(?'-z'(?=[\.]|$))))", "${b}${z}");
+        var r = Regex.Replace(d, ".", m => "负元空零壹贰叁肆伍陆柒捌玖空空空空空空空分角拾佰仟万亿兆京垓秭穰"[m.Value[0] - '-'].ToString());
+        if (s.IndexOf("0B0A") >= 0)
+        {
+            r += "整";
+        }
+
+        result = neg ? "负" + r : r;
+    }
+
+    private void Clear()
+    {
+        input = "";
+        result = "";
+        error = null;
+        copied = false;
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = true;
+        }
+        catch
+        {
+            copied = false;
+        }
+    }
 }

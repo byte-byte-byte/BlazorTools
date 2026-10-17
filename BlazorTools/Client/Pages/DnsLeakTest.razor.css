@@ -1,0 +1,22 @@
+/* ==========================================================================
+   DNS 泄露测试 · 页面专属样式（CSS 隔离，作用域仅限本组件）
+   —— 通用骨架在 wwwroot/css/theme.css 的「8.5 / 8.6 通用控件」段。
+   ========================================================================== */
+
+/* 测试按钮紧跟在面板标题行下面，不需要 btn-row 默认的上间距 */
+.btn-row.is-flush { margin-top: 0; }
+
+/* 出口 IP 是主结果，提亮主色便于一眼看到 */
+.v-ip {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: .02em;
+    text-shadow: 0 0 14px rgba(var(--accent-rgb), .35);
+}
+
+/* 请求失败时用错误色，和成功项拉开距离 */
+.v-ip.is-fail {
+    color: var(--err);
+    text-shadow: none;
+    font-weight: 600;
+}
