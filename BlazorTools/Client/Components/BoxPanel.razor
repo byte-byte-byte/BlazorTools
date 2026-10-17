@@ -12,6 +12,10 @@
                 </svg>
             </span>
             <h3>@MarkedTitle</h3>
+            @if (!string.IsNullOrEmpty(NetNote))
+            {
+                <span class="box-tag tag-net" title="@NetNote">第三方 API</span>
+            }
         </div>
         <p class="box-desc">@(string.IsNullOrWhiteSpace(Desc) ? "点击进入工具" : Desc)</p>
         <div class="box-foot">
@@ -38,6 +42,13 @@
     /// <summary>键盘上下键选中的卡片。</summary>
     [Parameter]
     public bool Selected { get; set; }
+
+    /// <summary>
+    /// 非空表示这个工具会向第三方发起网络请求，卡片上会打「第三方 API」角标；
+    /// 该字符串同时作为角标的 tooltip，用来说明具体请求了谁。
+    /// </summary>
+    [Parameter]
+    public string? NetNote { get; set; }
 
     /// <summary>
     /// 把标题按掩码切成「普通文本 / 高亮片段」交替的块，

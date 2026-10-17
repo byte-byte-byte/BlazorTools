@@ -643,7 +643,8 @@ h1, h2, h3, h4 { font-family: var(--font-mono); color: #eaf4ff; letter-spacing: 
 
     .hero-title i { color: var(--accent); font-style: normal; }
 
-.hero-sub { margin: 0; color: var(--txt-2); font-size: .92rem; }
+.hero-sub { margin: .1rem 0 0; color: var(--txt-2); font-size: .92rem; }
+    .hero-sub b { color: var(--accent); font-weight: 700; }
 
 /* ---- 首页模糊搜索 ---- */
 .hero-search {
@@ -870,6 +871,24 @@ mark, .box h3 mark {
 
 .box-main { position: relative; }
 
+/* 「需要第三方 API」角标 */
+.box-tag {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: .16rem .5rem;
+    border: 1px solid rgba(255, 176, 32, .45);
+    border-radius: 99px;
+    background: rgba(255, 176, 32, .12);
+    font: 700 9px/1.5 var(--font-mono);
+    letter-spacing: .1em;
+    color: var(--warn);
+    text-transform: uppercase;
+    white-space: nowrap;
+    cursor: help;
+}
+
+.box:hover .box-tag { box-shadow: 0 0 12px rgba(255, 176, 32, .28); }
+
 .box-head { display: flex; align-items: center; gap: .7rem; }
 
 .box-ico {
@@ -887,6 +906,7 @@ mark, .box h3 mark {
     .box-ico svg { width: 17px; height: 17px; }
 
 .box h3 {
+    min-width: 0;
     margin: 0;
     padding-left: 0;
     font-size: .98rem;

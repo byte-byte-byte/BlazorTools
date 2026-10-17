@@ -8,7 +8,10 @@
 <section class="hero">
     <div class="hero-tag">// RUNTIME · WEBASSEMBLY · LOCAL COMPUTE</div>
     <div class="hero-title">BLAZOR<i>//</i>TOOLS</div>
-    <p class="hero-sub">@Tools.Length 个纯前端小工具 · 全部计算在你的浏览器内完成，数据不出本机。</p>
+    <p class="hero-sub">
+        @Tools.Length 个前端小工具 · 其中 <b>@LocalCount</b> 个完全在你的浏览器内计算，数据不出本机；
+        另有 <b>@NetCount</b> 个（IP Info、DNS泄露）需要调用第三方接口，已用角标标出。
+    </p>
 
     <!-- 模糊搜索：子串 / 子序列混合匹配，↑↓ 选择、Enter 打开、Esc 清空 -->
     <div class="hero-search">
@@ -54,8 +57,8 @@
 
     <div class="hero-stats">
         <div class="stat"><b>@Tools.Length</b><span>TOOLS</span></div>
-        <div class="stat"><b>0</b><span>SERVER REQUEST</span></div>
-        <div class="stat"><b>100%</b><span>CLIENT SIDE</span></div>
+        <div class="stat"><b>@LocalCount</b><span>RUN LOCAL</span></div>
+        <div class="stat"><b>@NetCount</b><span>NEED NETWORK</span></div>
     </div>
 </section>
 
@@ -81,7 +84,8 @@ else
                       Title="@hit.Tool.Title"
                       Desc="@hit.Tool.Desc"
                       Mark="hit.Mark"
-                      Selected="@(i == selIndex)" />
+                      Selected="@(i == selIndex)"
+                      NetNote="@hit.Tool.NetNote" />
         }
     </div>
 }
@@ -109,14 +113,22 @@ else
         new("m4atomp3",          "M4A to MP3",      "本地转码，不上传文件",          "m4a mp3 audio yinpin ffmpeg zhuanma convert"),
         new("pictureToBase64",   "Img转Base64",     "图片转 Data URI",               "img image picture tupian tp base64 datauri"),
         new("imgtoicon",         "Img转Icon",       "生成 .ico 图标文件",            "img icon ico tupian tubiao favicon"),
-        new("ipinfo",            "IP Info",         "查询 IP 归属地与 ASN",          "ip guishudi asn diqu address geo wangluo"),
-        new("dnsleak",           "DNS泄露",         "检测 DNS 请求出口",             "dns leak xielou xl ceshi privacy yinsi"),
+        new("ipinfo",            "IP Info",         "查询 IP 归属地与 ASN",          "ip guishudi asn diqu address geo wangluo",
+            "需要联网：会向 ip4.ljjl.net / ip6.ljjl.net 查询，你的 IP 会暴露给该站点"),
+        new("dnsleak",           "DNS泄露",         "检测 DNS 请求出口",             "dns leak xielou xl ceshi privacy yinsi",
+            "需要联网：会向 edns.ip-api.com / surfsharkdns.com 发起请求，这正是检测原理，你的 IP 会暴露给这些解析服务"),
         new("colorpicker",       "ColorPicker",     "取色与色值格式转换",            "color picker quese qse sezhi hex rgb hsl yanse"),
     };
 
-    private sealed record Tool(string Url, string Title, string Desc, string Alias);
+    private sealed record Tool(string Url, string Title, string Desc, string Alias, string? NetNote = null);
 
     private sealed record Hit(Tool Tool, int Score, bool[]? Mark);
+
+    /// <summary>需要联网的工具数量。</summary>
+    private static int NetCount => Tools.Count(t => !string.IsNullOrEmpty(t.NetNote));
+
+    /// <summary>纯本地运行的工具数量。</summary>
+    private static int LocalCount => Tools.Length - NetCount;
 
     protected override void OnInitialized()
     {
