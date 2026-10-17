@@ -9,6 +9,8 @@
 
 		<!--https://learn.microsoft.com/zh-cn/dotnet/core/deploying/trimming/trimming-options?pivots=dotnet-6-0-->
 		<PublishTrimmed>true</PublishTrimmed>
+		<!-- WASM AOT：publish 时把 IL 编译为原生 wasm，数学运算提速 3~10 倍；仅影响 publish，不影响日常构建 -->
+		<!--<RunAOTCompilation>true</RunAOTCompilation>-->
 		<InvariantGlobalization>true</InvariantGlobalization>
 		<!--<BlazorEnableTimeZoneSupport>true</BlazorEnableTimeZoneSupport>-->
 		<EventSourceSupport>false</EventSourceSupport>

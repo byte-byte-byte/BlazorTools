@@ -54,7 +54,7 @@
 
     @if (busy)
     {
-        <div class="stat-strip"><span class="spin">正在生成 @keyLen 位密钥（本地计算，长密钥可能需要数秒到十几秒）</span></div>
+        <div class="stat-strip"><span class="spin">正在生成 @keyLen 位密钥（浏览器原生 WebCrypto，通常 0.1~1 秒）</span></div>
     }
 </div>
 
@@ -165,8 +165,8 @@
 }
 
 <p class="page-note rsa-foot">
-    本组件基于 <code>BouncyCastle.Cryptography v2.7.0</code>（Apache-2.0 License）实现：
-    密钥生成 <code>RsaKeyPairGenerator</code>、加解密 <code>RsaEngine</code> + <code>Pkcs1Encoding</code>、
+    本组件基于 <code>BouncyCastle.Cryptography</code>（Apache-2.0 License）实现：
+    密钥生成 浏览器原生 WebCrypto（导出 JWK 后由 BC 组装）、加解密 <code>RsaEngine</code> + <code>Pkcs1Encoding</code>、
     PEM 互转 <code>PemWriter / PemReader</code>（公钥 SPKI，私钥 PKCS#8，兼容 PKCS#1）。
     超过密钥容量的明文自动按 <code>密钥长度 - 11</code> 字节分块加密，解密时按密钥长度分块还原。
 </p>
@@ -232,14 +232,31 @@
 
         try
         {
-            int len = Math.Max(512, keyLen);
+            int len = Math.Max(1024, keyLen); // WebCrypto 最低 1024 位
 
-            var kpg = new RsaKeyPairGenerator();
-            kpg.Init(new KeyGenerationParameters(new SecureRandom(), len));
-            var pair = kpg.GenerateKeyPair();
+            // 密钥生成走浏览器原生 WebCrypto（native 速度，0.1s 级），导出 JWK 后由 BC 组装参数；
+            // PKCS#1 v1.5 加解密仍由 BC 完成（WebCrypto 不支持 PKCS#1 v1.5 加密，只支持 OAEP）。
+            var jwkPair = await JS.InvokeAsync<System.Text.Json.JsonElement>("eval", $@"
+(async () => {{
+    const kp = await crypto.subtle.generateKey({{ name: 'RSA-OAEP', modulusLength: {len}, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }}, true, ['encrypt', 'decrypt']);
+    return {{
+        pub: await crypto.subtle.exportKey('jwk', kp.publicKey),
+        prv: await crypto.subtle.exportKey('jwk', kp.privateKey),
+    }};
+}})()");
 
-            pubKey = ToPem(pair.Public);
-            prvKey = ToPem(new Pkcs8Generator(pair.Private));
+            var prvJ = jwkPair.GetProperty("prv");
+            var n    = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("n").GetString()!));
+            var e    = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("e").GetString()!));
+            var d    = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("d").GetString()!));
+            var p    = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("p").GetString()!));
+            var q    = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("q").GetString()!));
+            var dP   = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("dp").GetString()!));
+            var dQ   = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("dq").GetString()!));
+            var qInv = new Org.BouncyCastle.Math.BigInteger(1, B64Url(prvJ.GetProperty("qi").GetString()!));
+
+            pubKey = ToPem(new RsaKeyParameters(false, n, e));
+            prvKey = ToPem(new Pkcs8Generator(new RsaPrivateCrtKeyParameters(n, e, d, p, q, dP, dQ, qInv)));
         }
         catch (Exception ex)
         {
@@ -257,6 +274,13 @@
         using var sw = new StringWriter();
         new global::Org.BouncyCastle.OpenSsl.PemWriter(sw).WriteObject(obj);
         return sw.ToString();
+    }
+
+    /// <summary>Base64Url 解码（WebCrypto JWK 用）。</summary>
+    private static byte[] B64Url(string s)
+    {
+        s = s.Replace('-', '+').Replace('_', '/');
+        return Convert.FromBase64String((s.Length % 4) switch { 2 => s + "==", 3 => s + "=", _ => s });
     }
 
     private static PemObject? ReadPem(string pem)
