@@ -52,7 +52,6 @@
 		<BlazorWebAssemblyLazyLoad Include="BlazorTools.FFmpegConvert.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="BlazorTools.Cryptography.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="BouncyCastle.Cryptography.wasm" />
-		<BlazorWebAssemblyLazyLoad Include="FFmpegBlazor.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="SixLabors.ImageSharp.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="System.IO.Hashing.wasm" />
 	</ItemGroup>

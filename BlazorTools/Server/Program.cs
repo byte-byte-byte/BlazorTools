@@ -28,9 +28,9 @@ namespace BlazorTools
             }
             app.Use(async (context, next) =>
             {
-                context.Response.Headers.Add("Cross-Origin-Embedder-Policy", "require-corp");
-                context.Response.Headers.Add("Cross-Origin-Opener-Policy", "same-origin");
-                context.Response.Headers.Add("Access-Control-Allow-Origin", "*");
+                context.Response.Headers.Append("Cross-Origin-Embedder-Policy", "require-corp");
+                context.Response.Headers.Append("Cross-Origin-Opener-Policy", "same-origin");
+                context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
                 await next.Invoke();
             });
 

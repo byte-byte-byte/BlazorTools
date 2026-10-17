@@ -1,105 +1,229 @@
 ﻿@page "/mp4tomp3"
 @inject IJSRuntime JS
-@using FFmpegBlazor
+@implements IAsyncDisposable
 
-<h3>Mp4 to Mp3</h3>
-<InputFile OnChange="fileLoad" />
-<br />
-<br />
-<video width="300" height="200" autoplay controls src="@url" />
-<br />
-<br />
-<button class="btn btn-primary" @onclick="Process">Convert Mp3</button>
-<br />
-<br />
-<p>@presentStr</p>
-<audio controls src="@url2" />
-<p><a href="https://github.com/sps014/FFmpegBlazor">powered by FFmpegBlazor</a></p>
+<PageTitle>MP4 转 MP3 · BlazorTools</PageTitle>
+
+<h3>MP4 转 MP3</h3>
+
+<p class="page-note">
+    基于 ffmpeg.wasm 在浏览器内提取视频音轨并转码为 MP3，文件全程不上传服务器；
+    转码核心已内置于本站静态资源，首次使用约需加载 24 MB。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">选择文件 File</span>
+        <span class="panel-sub">视频容器 · 单次最大 2 GB</span>
+    </div>
+
+    <div class="file-pick">
+        <InputFile OnChange="fileLoad" accept=".mp4,video/mp4" disabled="@busy" />
+        @if (busy)
+        {
+            <span class="spin">转换中</span>
+        }
+    </div>
+
+    @if (!string.IsNullOrEmpty(url))
+    {
+        <div class="cv-meta">
+            <span class="cv-meta-k">已选择</span>
+            <span class="cv-meta-v" title="@fileName">@fileName</span>
+            <span class="cv-meta-size">@fileSizeStr</span>
+        </div>
+    }
+</div>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">源文件预览 Source</span>
+        <span class="panel-sub">选完文件即可播放</span>
+    </div>
+
+    <div class="preview-box">
+        @if (!string.IsNullOrEmpty(url))
+        {
+            <video controls src="@url" />
+        }
+        else
+        {
+            <span class="preview-empty">Select an MP4 file</span>
+        }
+    </div>
+</div>
+
+@if (errorText is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@errorText</span>
+    </div>
+}
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">转换 Convert</span>
+        <span class="panel-sub">FFmpeg 转码 · 浏览器本地执行</span>
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" disabled="@(string.IsNullOrEmpty(url) || busy)" @onclick="Convert">
+            @(coreLoaded ? "转换为 MP3" : "加载核心并转换为 MP3")
+        </button>
+    </div>
+
+    @if (busy)
+    {
+        <div class="cv-progress">
+            <div class="cv-progress-bar"><i style="@ProgressStyle"></i></div>
+            <span class="cv-progress-text">@statusText</span>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(statusText))
+    {
+        <p class="cv-status">@statusText</p>
+    }
+
+    @if (!string.IsNullOrEmpty(url2))
+    {
+        <div class="cv-result">
+            <span class="cv-meta-k">输出结果 Output</span>
+            <audio controls src="@url2" />
+            <div class="btn-row">
+                <a class="btn btn-primary" href="@url2" download="output.mp3">下载 output.mp3</a>
+            </div>
+        </div>
+    }
+</div>
+
+<p class="page-note">
+    Powered by <a href="https://github.com/ffmpegwasm/ffmpeg.wasm" target="_blank" rel="noopener">ffmpeg.wasm</a>（核心已本地化，无需外网）
+</p>
+
 @code {
-    string url; string url2;
-    FFMPEG ff;
-    byte[] buffer;
-    string presentStr;
+    private const long MaxBytes = 2L * 1024 * 1024 * 1024;
+    private const string ModulePath = "./_content/BlazorTools.FFmpegConvert/js/ffmpeg-convert.js";
+
+    private IJSObjectReference? module;
+    private DotNetObjectReference<Mp4ToMp3>? dotnetRef;
+    private string url = "", url2 = "", statusText = "";
+    private string? errorText;
+    private double progressRatio;
+    private string fileSizeStr = "";
+    private string fileName = "myFile.mp4", contentType = "video/mp4";
+    private bool busy;
+    private bool coreLoaded;
+
+    private string ProgressStyle => $"width:{progressRatio * 100:F0}%";
 
     protected override async Task OnInitializedAsync()
     {
-        if (FFmpegFactory.Runtime == null)
+        dotnetRef = DotNetObjectReference.Create(this);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
         {
-            FFmpegFactory.Logger += WriteLogs;
-            FFmpegFactory.Progress += ProgressChange;
+            module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
         }
-
-        //initialize Library
-        await FFmpegFactory.Init(JS);
     }
 
-    async void fileLoad(InputFileChangeEventArgs v)
+    private async Task fileLoad(InputFileChangeEventArgs v)
     {
-        //get fist file from input selection
-        var file = v.GetMultipleFiles()[0];
-
-        //read all bytes
-        using var stream = file.OpenReadStream(200000000); //Max size for file that can be read
-        buffer = new byte[file.Size];
-
-        //read all bytes
-        await stream.ReadAsync(buffer);
-
-        //create a video link from buffer so that video can be played
-        url = FFmpegFactory.CreateURLFromBuffer(buffer, "myFile.mp4", file.ContentType);
-
-        //reRender DOM
-        StateHasChanged();
-    }
-
-    async void Process()
-    {
-        //create an instance
-        ff = FFmpegFactory.CreateFFmpeg(new FFmpegConfig() { Log = true });
-
-        //download all dependencies from cdn
-        await ff.Load();
-
-        if (!ff.IsLoaded) return;
-
-        //write buffer to in-memory files (special emscripten files, Ffmpeg only interact with this file)
-        ff.WriteFile("myFile.mp4", buffer);
-
-        //Pass CLI argument here equivalent to ffmpeg -i myFile.mp4 output.mp3
-        await ff.Run("-i", "myFile.mp4", "output.mp3");
-
-        //delete in-memory file
-        //ff.UnlinkFile("myFile.mp4");
-    }
-
-    async void ProgressChange(Progress m)
-    {
-        // display progress % (0-1)
-        Console.WriteLine($"Progress {m.Ratio}");
-
-        presentStr = (m.Ratio * 100).ToString("F0") + "%";
-        StateHasChanged();
-            
-        //if ffmpeg processing is complete (generate a media URL so that it can be played or alternatively download that file)
-        if (m.Ratio == 1)
+        try
         {
-            //get bytepointer from c wasm to c#
-            var res = await ff.ReadFile("output.mp3");
+            var file = v.GetMultipleFiles()[0];
+            fileName = string.IsNullOrWhiteSpace(file.Name) ? "myFile.mp4" : file.Name;
+            contentType = string.IsNullOrWhiteSpace(file.ContentType) ? "video/mp4" : file.ContentType;
 
+            var bytes = new byte[file.Size];
+            await using var stream = file.OpenReadStream(MaxBytes);
+            await stream.ReadExactlyAsync(bytes);
 
-            //generate a url from file bufferPointer
-            url2 = FFmpegFactory.CreateURLFromBuffer(res, "output.mp3", "audio/mp3");
-
-            //Download the file instantly
-
-            //FFmpegFactory.DownloadBufferAsFile(res, "output.mp3", "audio/mp3");
-
+            // 字节经 DotNetStreamReference 高效传入 JS（ArrayBuffer，无 JSON 序列化），
+            // 在 JS 侧缓存供转换复用，同时生成预览 Blob URL
+            url = await module!.InvokeAsync<string>("setFile",
+                fileName, new DotNetStreamReference(new MemoryStream(bytes)), contentType);
+            url2 = "";
+            errorText = null;
+            progressRatio = 0;
+            fileSizeStr = $"{file.Size / 1024.0 / 1024.0:F1} MB";
+            statusText = "文件已就绪，点击上方按钮开始转换";
+        }
+        catch (Exception ex)
+        {
+            statusText = "";
+            errorText = "读取文件失败：" + ex.Message;
+        }
+        finally
+        {
             StateHasChanged();
         }
     }
 
-    void WriteLogs(Logs m)
+    private async Task Convert()
     {
-        Console.WriteLine(m.Type + " " + m.Message);
+        if (module is null || busy) return;
+        busy = true;
+        try
+        {
+            if (!coreLoaded)
+            {
+                statusText = "正在加载 FFmpeg 核心（约 24 MB，已内置于本站）…";
+                errorText = null;
+                StateHasChanged();
+                coreLoaded = await module.InvokeAsync<bool>("load", dotnetRef);
+                if (!coreLoaded)
+                {
+                    statusText = "";
+                    errorText = "FFmpeg 核心加载失败，请刷新页面重试";
+                    return;
+                }
+            }
+
+            statusText = "转换中…";
+            errorText = null;
+            StateHasChanged();
+            url2 = await module.InvokeAsync<string>("convert",
+                new[] { "-i", fileName, "output.mp3" }, fileName, "output.mp3", "audio/mpeg");
+            statusText = "转换完成";
+        }
+        catch (Exception ex)
+        {
+            statusText = "";
+            errorText = "转换失败：" + ex.Message;
+        }
+        finally
+        {
+            busy = false;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public Task OnProgress(double ratio)
+    {
+        progressRatio = Math.Min(1, Math.Max(0, ratio));
+        statusText = progressRatio < 1 ? $"转换中… {(progressRatio * 100):F0}%" : "输出文件生成中…";
+        try { StateHasChanged(); } catch (ObjectDisposedException) { }
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnLog(string message)
+    {
+        Console.WriteLine(message);
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        dotnetRef?.Dispose();
+        if (module is not null)
+        {
+            try { await module.DisposeAsync(); } catch { }
+        }
     }
 }

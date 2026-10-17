@@ -1,0 +1,105 @@
+﻿/* M4aToMp3.razor.css / Mp4ToMp3.razor.css —— 转换页专属样式
+   其余全部复用 theme.css 通用控件库（panel / file-pick / preview-box / btn / btn-row / alert-box / spin / page-note）。
+
+   RCL 隔离样式说明：构建时随 BlazorTools.FFmpegConvert.bundle.scp.css 生成，
+   由 Client 的 BlazorTools.Client.styles.css 自动 @import，无需 index.html 手工链接。 */
+
+/* ---- 预览框内媒体尺寸（音频拉宽、视频限高） ---- */
+.preview-box audio { width: min(560px, 100%); }
+
+.preview-box video {
+    max-width: 100%;
+    max-height: 320px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, .5);
+}
+
+/* ---- 文件元信息行（已选择 · 文件名 · 大小） ---- */
+.cv-meta {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin-top: .75rem;
+    font-size: .8rem;
+    color: var(--txt-2);
+    min-width: 0;
+}
+
+.cv-meta-k {
+    flex: 0 0 auto;
+    font: 600 .66rem/1.4 var(--font-mono);
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--txt-3);
+}
+
+.cv-meta-v {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-mono);
+    font-size: .78rem;
+    color: var(--txt);
+}
+
+.cv-meta-size {
+    flex: 0 0 auto;
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: .72rem;
+    color: var(--txt-3);
+}
+
+/* ---- 转换进度条 ---- */
+.cv-progress {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    margin-top: .95rem;
+}
+
+.cv-progress-bar {
+    flex: 1 1 auto;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(130, 165, 220, .12);
+    overflow: hidden;
+}
+
+.cv-progress-bar i {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 10px rgba(var(--accent-rgb), .5);
+    transition: width .25s ease;
+}
+
+.cv-progress-text {
+    flex: 0 0 auto;
+    font: 600 .72rem/1.4 var(--font-mono);
+    color: var(--txt-2);
+    white-space: nowrap;
+}
+
+/* ---- 非忙碌状态文字 ---- */
+.cv-status {
+    margin: .85rem 0 0;
+    font-size: .8rem;
+    color: var(--txt-2);
+}
+
+/* ---- 输出结果区 ---- */
+.cv-result {
+    display: flex;
+    flex-direction: column;
+    gap: .55rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--line);
+}
+
+.cv-result audio { width: min(560px, 100%); }
+
+.cv-result .btn-row { margin-top: .15rem; }
