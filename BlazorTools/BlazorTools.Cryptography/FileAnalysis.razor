@@ -1,0 +1,357 @@
+﻿@page "/fileanalysis"
+@using System.Buffers.Binary
+@using System.Diagnostics
+@using Microsoft.AspNetCore.Components.Forms
+@using Org.BouncyCastle.Crypto
+@using Org.BouncyCastle.Crypto.Digests
+@inject IJSRuntime JS
+
+<PageTitle>文件分析 · BlazorTools</PageTitle>
+
+<h3>文件分析</h3>
+
+<p class="page-note">
+    选择本地文件，在浏览器内并行计算 CRC-32 / CRC-64 / XXH64 / XXH128 / MD5 / SHA-1 / SHA-256 / SHA-384 / SHA-512 / SHA3-256
+    十种校验值。文件分块流式读取（512 KB/块），不整块载入内存；十项任务彼此独立，任何一项失败只影响自身卡片，不会阻塞其它结果输出。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">选择文件 File</span>
+        <span class="panel-sub">单次最大 2 GB · 全程本机计算</span>
+    </div>
+
+    <div class="file-pick">
+        <InputFile OnChange="OnFileSelected" disabled="@busy" />
+        @if (busy)
+        {
+            <span class="spin">计算中</span>
+        }
+    </div>
+
+    @if (fileError is not null)
+    {
+        <div class="alert-box">
+            <span class="alert-box-ico" aria-hidden="true">!</span>
+            <span>@fileError</span>
+        </div>
+    }
+
+    @if (fileName is not null)
+    {
+        <div class="stat-strip">
+            <span class="stat-chip">文件 <b>@fileName</b></span>
+            <span class="stat-chip">大小 <b>@FmtSize(fileSize)</b></span>
+            <span class="stat-chip">进度 <b>@DoneCount()/@Algos.Length</b></span>
+            @if (totalMs > 0)
+            {
+                <span class="stat-chip">总耗时 <b>@totalMs ms</b></span>
+            }
+        </div>
+    }
+</div>
+
+@if (rows.Count > 0)
+{
+    <div class="panel">
+        <div class="panel-head">
+            <span class="panel-title">校验结果 Hashes</span>
+            <span class="panel-sub">十项并行 · 独立容错</span>
+        </div>
+
+        <div class="hash-grid">
+            @foreach (var r in rows)
+            {
+                <div class="hash-card @r.Status">
+                    <div class="hash-top">
+                        <span class="hash-name" title="@r.Hint">@r.Name</span>
+                        <span class="hash-lib">@(r.Lib == "bc" ? "BouncyCastle" : "System.IO.Hashing")</span>
+                    </div>
+
+                    @if (r.Status == "error")
+                    {
+                        <div class="hash-err">@r.Error</div>
+                    }
+                    else
+                    {
+                        <div class="hash-val">@(r.Status == "done" ? r.Value : "…")</div>
+                    }
+
+                    <div class="hash-bar"><i style="@BarStyle(r)"></i></div>
+
+                    <div class="hash-meta">
+                        <span>@StatusText(r)</span>
+                        @if (r.Status == "done")
+                        {
+                            <button type="button" class="copy-btn" title="复制 @r.Name 值" aria-label="复制 @r.Name 值"
+                                    @onclick='async () => await Copy(r.Value, r.Id)'>@Mark(r.Id)</button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="btn-row">
+            <button type="button" class="btn" disabled="@busy" @onclick="Clear">清空结果</button>
+        </div>
+    </div>
+}
+
+<p class="page-note fa-foot">
+    摘要类（MD5 / SHA-1 / SHA-256 / SHA-384 / SHA-512 / SHA3-256）基于 <code>BouncyCastle.Cryptography</code> 实现，
+    校验类（CRC-32 / CRC-64 / XXH64 / XXH128）基于微软 <code>System.IO.Hashing</code> 实现；全部计算在浏览器 WASM 内本地完成，文件数据不出本机。
+    说明：CRC-64 采用 ECMA-182 多项式；XXH128 即 XXH3-128；MD5 与 SHA-1 已不具备抗碰撞性，仅建议用于完整性校验。
+</p>
+
+@code {
+    /// <summary>算法清单：Id / 名称 / 实现库（bc = BouncyCastle, ioh = System.IO.Hashing）/ 说明。</summary>
+    private static readonly (string Id, string Name, string Lib, string Hint)[] Algos =
+    {
+        ("crc32",   "CRC-32",   "ioh", "CRC-32/IEEE 802.3（zlib、gzip、PNG 同款）"),
+        ("crc64",   "CRC-64",   "ioh", "CRC-64/ECMA-182 多项式"),
+        ("xxh64",   "XXH64",    "ioh", "xxHash 64 位，极快的非加密哈希"),
+        ("xxh128",  "XXH128",   "ioh", "XXH3-128 位，xxHash 家族 128 位变体"),
+        ("md5",     "MD5",      "bc",  "128 位，仅用于完整性校验，无抗碰撞性"),
+        ("sha1",    "SHA-1",    "bc",  "160 位，已被攻破，仅用于兼容校验"),
+        ("sha256",  "SHA-256",  "bc",  "SHA-2 家族 256 位"),
+        ("sha384",  "SHA-384",  "bc",  "SHA-2 家族 384 位"),
+        ("sha512",  "SHA-512",  "bc",  "SHA-2 家族 512 位"),
+        ("sha3",    "SHA3-256", "bc",  "SHA-3（Keccak）256 位"),
+    };
+
+    private const long MaxBytes = 2L * 1024 * 1024 * 1024;
+    private const int ChunkBytes = 512 * 1024;
+
+    private List<AlgoRow> rows = new();
+    private string? fileName;
+    private long fileSize;
+    private string? fileError;
+    private long totalMs;
+    private bool busy;
+    private string copied = "";
+
+    private string Mark(string key) => copied == key ? "✓" : "⧉";
+
+    private int DoneCount() => rows.Count(r => r.Status is "done" or "error");
+
+    private string BarStyle(AlgoRow r) => r.Status switch
+    {
+        "done" => "width:100%",
+        "running" => $"width:{r.Progress * 100:0}%",
+        _ => "width:0",
+    };
+
+    private string StatusText(AlgoRow r) => r.Status switch
+    {
+        "pending" => "排队中",
+        "running" => $"已读 {r.Progress * 100:0}%",
+        "done" => $"{r.Value.Length * 4} 位 · {r.ElapsedMs} ms",
+        _ => "失败",
+    };
+
+    private static string FmtSize(long b) => b switch
+    {
+        >= 1L << 30 => (b / (double)(1L << 30)).ToString("0.##") + " GB",
+        >= 1L << 20 => (b / (double)(1L << 20)).ToString("0.##") + " MB",
+        >= 1L << 10 => (b / (double)(1L << 10)).ToString("0.##") + " KB",
+        _ => b + " B",
+    };
+
+    private void Clear()
+    {
+        rows = new List<AlgoRow>();
+        fileName = null;
+        fileSize = 0;
+        fileError = null;
+        totalMs = 0;
+        copied = "";
+    }
+
+    private async Task Copy(string value, string key)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = key;
+        }
+        catch
+        {
+            copied = "";
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        if (busy)
+        {
+            return;
+        }
+
+        var f = e.File;
+        if (f is null)
+        {
+            return;
+        }
+
+        if (f.Size > MaxBytes)
+        {
+            fileError = $"文件 {FmtSize(f.Size)} 超过单次 2 GB 上限，请拆分后再试。";
+            return;
+        }
+
+        fileError = null;
+        fileName = f.Name;
+        fileSize = f.Size;
+        totalMs = 0;
+        copied = "";
+        rows = Algos.Select(a => new AlgoRow(a.Id, a.Name, a.Lib, a.Hint)).ToList();
+        busy = true;
+
+        var sw = Stopwatch.StartNew();
+        var tasks = rows.Select(r => RunOneAsync(r, f, CreateHasher(r.Id))).ToArray();
+        await Task.WhenAll(tasks);
+        totalMs = sw.ElapsedMilliseconds;
+        busy = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>单项计算：独立流式读取 + 独立容错，失败只标记自身卡片。</summary>
+    private async Task RunOneAsync(AlgoRow row, IBrowserFile file, IHasher hasher)
+    {
+        row.Status = "running";
+        var sw = Stopwatch.StartNew();
+        var lastUi = 0L;
+        try
+        {
+            await using var stream = file.OpenReadStream(MaxBytes);
+            var buf = new byte[ChunkBytes];
+            long total = 0;
+            int n;
+            while ((n = await stream.ReadAsync(buf)) > 0)
+            {
+                hasher.Append(buf, n);
+                total += n;
+                if (fileSize > 0 && sw.ElapsedMilliseconds - lastUi >= 120)
+                {
+                    lastUi = sw.ElapsedMilliseconds;
+                    row.Progress = Math.Min(1.0, (double)total / fileSize);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+
+            row.Value = hasher.FinalHex();
+            row.Progress = 1;
+            row.Status = "done";
+        }
+        catch (Exception ex)
+        {
+            row.Status = "error";
+            row.Error = ex.Message;
+        }
+        finally
+        {
+            row.ElapsedMs = sw.ElapsedMilliseconds;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static IHasher CreateHasher(string id) => id switch
+    {
+        "crc32"  => new Crc32Hasher(),
+        "crc64"  => new Crc64Hasher(),
+        "xxh64"  => new Xx64Hasher(),
+        "xxh128" => new Xx128Hasher(),
+        "md5"    => new BcHasher(new MD5Digest()),
+        "sha1"   => new BcHasher(new Sha1Digest()),
+        "sha256" => new BcHasher(new Sha256Digest()),
+        "sha384" => new BcHasher(new Sha384Digest()),
+        "sha512" => new BcHasher(new Sha512Digest()),
+        _        => new BcHasher(new Sha3Digest(256)),
+    };
+
+    /// <summary>增量哈希抽象：分块喂入，最后一次性取十六进制结果。</summary>
+    private interface IHasher
+    {
+        void Append(byte[] buf, int len);
+
+        string FinalHex();
+    }
+
+    private sealed class Crc32Hasher : IHasher
+    {
+        private readonly System.IO.Hashing.Crc32 h = new();
+
+        public void Append(byte[] buf, int len) => h.Append(buf.AsSpan(0, len));
+
+        // GetCurrentHash 输出为小端字节序
+        public string FinalHex() => BinaryPrimitives.ReadUInt32LittleEndian(h.GetCurrentHash()).ToString("X8").ToLowerInvariant();
+    }
+
+    private sealed class Crc64Hasher : IHasher
+    {
+        private readonly System.IO.Hashing.Crc64 h = new();
+
+        public void Append(byte[] buf, int len) => h.Append(buf.AsSpan(0, len));
+
+        // GetCurrentHash 输出为大端字节序（ECMA-182 check 值一致性已验证）
+        public string FinalHex() => BinaryPrimitives.ReadUInt64BigEndian(h.GetCurrentHash()).ToString("X16").ToLowerInvariant();
+    }
+
+    private sealed class Xx64Hasher : IHasher
+    {
+        private readonly System.IO.Hashing.XxHash64 h = new();
+
+        public void Append(byte[] buf, int len) => h.Append(buf.AsSpan(0, len));
+
+        // GetCurrentHash 输出为大端字节序（与 xxHash 官方 check 值一致性已验证）
+        public string FinalHex() => BinaryPrimitives.ReadUInt64BigEndian(h.GetCurrentHash()).ToString("X16").ToLowerInvariant();
+    }
+
+    private sealed class Xx128Hasher : IHasher
+    {
+        private readonly System.IO.Hashing.XxHash128 h = new();
+
+        public void Append(byte[] buf, int len) => h.Append(buf.AsSpan(0, len));
+
+        // GetCurrentHash 字节序即官方规范序（高 64 位在前），直接转 hex
+        public string FinalHex() => Convert.ToHexString(h.GetCurrentHash()).ToLowerInvariant();
+    }
+
+    private sealed class BcHasher : IHasher
+    {
+        private readonly IDigest d;
+
+        public BcHasher(IDigest digest) => d = digest;
+
+        public void Append(byte[] buf, int len) => d.BlockUpdate(buf, 0, len);
+
+        public string FinalHex()
+        {
+            var o = new byte[d.GetDigestSize()];
+            d.DoFinal(o, 0);
+            return Convert.ToHexString(o).ToLowerInvariant();
+        }
+    }
+
+    private sealed class AlgoRow
+    {
+        public AlgoRow(string id, string name, string lib, string hint)
+        {
+            Id = id;
+            Name = name;
+            Lib = lib;
+            Hint = hint;
+        }
+
+        public string Id { get; }
+        public string Name { get; }
+        public string Lib { get; }
+        public string Hint { get; }
+
+        public string Status = "pending"; // pending | running | done | error
+        public string Value = "";
+        public string? Error;
+        public double Progress;
+        public long ElapsedMs;
+    }
+}

@@ -123,6 +123,7 @@ else
         new("aesencrypt",        "AES加密解密",     "BouncyCastle 实现 AES 六模式加解密", "aes aesjm jiami jiemi mima encrypt decrypt symmetric duichen gcm cbc ecb ctr cfb ofb bouncycastle jiami"),
         new("rsaencrypt",        "RSA加密解密·BC",  "BouncyCastle 实现 RSA 加解密与密钥生成", "rsa rsabc bouncycastle rsaencrypt jiami jiemi miyao gongyue siyao publickey privatekey pem pkcs1 miyue"),
         new("desencrypt",        "DES加密解密",     "BouncyCastle 实现 DES 五模式加解密", "des desjm jiami jiemi mima encrypt decrypt symmetric duichen cbc ecb ctr cfb ofb bouncycastle 56wei guodu jiami"),
+        new("fileanalysis",      "文件分析",        "并行计算 CRC-32/64 XXH64/128 MD5 SHA-1/2/3 十种校验值", "fileanalysis wenjian fenxi jiaoyanhe haxi zhaiyao crc32 crc64 xxhash xxh128 md5 sha1 sha256 sha384 sha512 sha3 checksum digest hash file analysis jiaoyan"),
     };
 
     private sealed record Tool(string Url, string Title, string Desc, string Alias, string? NetNote = null);

@@ -54,6 +54,7 @@
 		<BlazorWebAssemblyLazyLoad Include="BouncyCastle.Cryptography.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="FFmpegBlazor.wasm" />
 		<BlazorWebAssemblyLazyLoad Include="SixLabors.ImageSharp.wasm" />
+		<BlazorWebAssemblyLazyLoad Include="System.IO.Hashing.wasm" />
 	</ItemGroup>
 	<ItemGroup>
 		<Folder Include="Properties\PublishProfiles\" />

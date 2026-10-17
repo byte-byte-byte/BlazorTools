@@ -26,10 +26,10 @@
         {
             "BlazorTools.FFmpegConvert.wasm", "FFmpegBlazor.wasm", "SixLabors.ImageSharp.wasm",
         },
-        "aesencrypt" or "rsaencrypt" or "desencrypt" => new List<string>
+        "aesencrypt" or "rsaencrypt" or "desencrypt" or "fileanalysis" => new List<string>
         {
             // BouncyCastle.Cryptography 是 BlazorTools.Cryptography 的依赖，必须一并加载
-            "BlazorTools.Cryptography.wasm", "BouncyCastle.Cryptography.wasm",
+            "BlazorTools.Cryptography.wasm", "BouncyCastle.Cryptography.wasm", "System.IO.Hashing",
         },
         _ => new List<string>(),
     };
