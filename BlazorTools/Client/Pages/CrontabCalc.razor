@@ -1,0 +1,480 @@
+﻿@page "/crontabcalc"
+@inject IJSRuntime JS
+
+<PageTitle>Cron执行时间计算 · BlazorTools</PageTitle>
+
+<h3>Cron 执行时间计算</h3>
+
+<p class="page-note">
+    解析标准 5 字段 CRON 表达式（分 时 日 月 周），校验合法性并给出未来 5 次执行时间。
+    支持 <code>*</code>、<code>,</code>、<code>-</code>、<code>/</code> 步进，月份与星期可用英文缩写（JAN、MON 等），
+    也支持 <code>@@hourly</code>、<code>@@daily</code> 等简写。全部计算在浏览器本地完成。
+</p>
+
+<div class="panel form-panel">
+    <div class="panel-head">
+        <span class="panel-title">表达式</span>
+        <span class="panel-sub">5 字段 · 分 时 日 月 周</span>
+    </div>
+
+    <div class="form-grid">
+        <div class="field">
+            <label for="cron-expr">CRON 表达式</label>
+            <input id="cron-expr"
+                   class="form-control"
+                   type="text"
+                   autocomplete="off"
+                   spellcheck="false"
+                   placeholder="*/5 * * * *"
+                   @bind="expr"
+                   @bind:event="oninput"
+                   @onkeydown='e => { if (e.Key == "Enter") Calc(); }' />
+        </div>
+    </div>
+
+    <div class="chip-row">
+        <span class="chip-row-label">常用表达式</span>
+        @foreach (var d in Demos)
+        {
+            <button type="button" class="chip-btn @(expr == d.Value ? "is-on" : null)"
+                    title="@d.Desc"
+                    @onclick="() => UseDemo(d.Value)">@d.Value</button>
+        }
+    </div>
+
+    <div class="btn-row">
+        <button type="button" class="btn btn-primary" @onclick="Calc">计算</button>
+        <button type="button" class="btn" @onclick="Clear">清空</button>
+    </div>
+
+    @if (nextRuns is not null)
+    {
+        <div class="stat-strip">
+            <span class="stat-chip">基准 <b>@baseTime.ToString("yyyy-MM-dd HH:mm")</b>（本机时间）</span>
+            <span class="stat-chip">命中 <b>@nextRuns.Count</b> 次</span>
+        </div>
+    }
+</div>
+
+@if (error is not null)
+{
+    <div class="alert-box">
+        <span class="alert-box-ico" aria-hidden="true">!</span>
+        <span>@error</span>
+    </div>
+}
+
+@if (nextRuns is not null)
+{
+    <div class="metric-grid">
+        @for (int i = 0; i < nextRuns.Count; i++)
+        {
+            var run = nextRuns[i];
+            var runKey = run.ToString("yyyy-MM-dd HH:mm");
+            <div class="metric">
+                <div class="metric-k">第 @(i + 1) 次</div>
+                <div class="metric-v v-cron">@run.ToString("yyyy-MM-dd HH:mm ddd")</div>
+                <div class="metric-hint">@Rel(run)</div>
+                <button type="button"
+                        class="copy-btn @(copied == runKey ? "is-done" : null)"
+                        title="复制第 @(i + 1) 次时间"
+                        aria-label="复制第 @(i + 1) 次时间"
+                        @onclick='async () => await Copy(runKey)'>@(copied == runKey ? "✓" : "⧉")</button>
+            </div>
+        }
+    </div>
+}
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">字段含义</span>
+        <span class="panel-sub">依次对应 5 列</span>
+    </div>
+
+    <div class="kv-list">
+        <div class="kv-item">
+            <div class="kv-k">分 Minute</div>
+            <div class="kv-v">0–59。例：<code>*</code> 每分钟、<code>*/10</code> 每 10 分钟、<code>0,15,30,45</code> 整点四刻、<code>10-20/2</code> 第 10–20 分内每 2 分钟</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">时 Hour</div>
+            <div class="kv-v">0–23。例：<code>*</code> 每小时、<code>9-18</code> 每天早 9 到晚 6 之间的每个整点、<code>9/2</code> 从 9 点起每 2 小时（9,11,13…23）</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">日 Day-of-Month</div>
+            <div class="kv-v">1–31。例：<code>1</code> 每月 1 日、<code>1,15</code> 每月 1 日和 15 日、<code>L</code> 类语法不支持。注意大小月：2 月没有 30、31 日</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">月 Month</div>
+            <div class="kv-v">1–12，可用英文缩写 JAN–DEC。例：<code>*</code> 每月、<code>3,6,9,12</code> 季度末月份、<code>MAR-JUN</code> 三月到六月</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">周 Day-of-Week</div>
+            <div class="kv-v">0–7，0 和 7 都是周日，可用缩写 SUN–SAT。例：<code>1-5</code> 周一到周五、<code>0</code> 每周日、<code>1,3,5</code> 一三五</div>
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">特殊规则</span>
+        <span class="panel-sub">容易踩坑的语义</span>
+    </div>
+
+    <div class="kv-list">
+        <div class="kv-item">
+            <div class="kv-k">日 + 周</div>
+            <div class="kv-v">两个字段<b>都写死具体值</b>时取「或」：任一命中即执行；只限制其中一个时，按被限制的那个执行。这是 Vixie cron 的经典语义，不是 bug</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">问号 ?</div>
+            <div class="kv-v">等价于 <code>*</code>（来自 Quartz 的习惯写法，本工具在日/周字段同样接受）</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">起点/步进</div>
+            <div class="kv-v"><code>a/step</code> 表示从 a 开始到该字段最大值、每 step 执行一次，如 <code>9/2</code>；<code>a-b/step</code> 只在 a–b 区间内步进</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">@@简写</div>
+            <div class="kv-v"><code>@@hourly</code>=<code>0 * * * *</code>、<code>@@daily</code>=<code>0 0 * * *</code>、<code>@@weekly</code>=<code>0 0 * * 0</code>、<code>@@monthly</code>=<code>0 0 1 * *</code>、<code>@@yearly</code>=<code>0 0 1 1 *</code>；不支持 <code>@@reboot</code>（无法预测重启时间）</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">时间基准</div>
+            <div class="kv-v">使用<b>本机本地时间</b>计算，不做时区换算；跨夏令时的系统需自行留意偏移</div>
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="panel-head">
+        <span class="panel-title">示例</span>
+        <span class="panel-sub">点击左侧常用表达式可直接试算</span>
+    </div>
+
+    <div class="kv-list">
+        <div class="kv-item">
+            <div class="kv-k">*/5 * * * *</div>
+            <div class="kv-v">每 5 分钟执行一次</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">0 * * * *</div>
+            <div class="kv-v">每小时整点执行（每小时的第 0 分）</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">30 8 * * 1-5</div>
+            <div class="kv-v">工作日（周一到周五）08:30 执行</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">0 9,18 * * *</div>
+            <div class="kv-v">每天 09:00 和 18:00 各执行一次</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">0 0 1 * *</div>
+            <div class="kv-v">每月 1 日 00:00 执行（月初任务）</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">15 2 * * 0</div>
+            <div class="kv-v">每周日 02:15 执行（0 = 周日）</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">0 4 1 JAN *</div>
+            <div class="kv-v">每年 1 月 1 日 04:00 执行（年初任务）</div>
+        </div>
+        <div class="kv-item">
+            <div class="kv-k">10-20/3 12 * * *</div>
+            <div class="kv-v">每天 12:10、12:13、12:16、12:19 执行</div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string expr = "";
+    private string? error = null;
+    private List<DateTime>? nextRuns = null;
+    private DateTime baseTime;
+    private string copied = "";
+
+    private sealed record Demo(string Value, string Desc);
+
+    private static readonly Demo[] Demos =
+    {
+        new("*/5 * * * *",   "每 5 分钟"),
+        new("0 * * * *",     "每小时整点"),
+        new("30 8 * * 1-5",  "工作日 08:30"),
+        new("0 9,18 * * *",  "每天 9 点和 18 点"),
+        new("0 0 1 * *",     "每月 1 日零点"),
+        new("0 4 1 JAN *",   "每年 1 月 1 日 04:00"),
+    };
+
+    private void UseDemo(string v)
+    {
+        expr = v;
+        error = null;
+        nextRuns = null;
+        copied = "";
+    }
+
+    private void Clear()
+    {
+        expr = "";
+        error = null;
+        nextRuns = null;
+        copied = "";
+    }
+
+    private async Task Copy(string value)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", value ?? "");
+            copied = value;
+        }
+        catch
+        {
+            copied = "";
+        }
+    }
+
+    private static string Rel(DateTime t)
+    {
+        var span = t - DateTime.Now;
+        if (span.TotalMinutes < 1) return "马上执行";
+        if (span.TotalMinutes < 60) return $"约 {(int)Math.Round(span.TotalMinutes)} 分钟后";
+        if (span.TotalHours < 24)
+        {
+            int h = (int)span.TotalHours;
+            int m = span.Minutes;
+            return m == 0 ? $"约 {h} 小时后" : $"约 {h} 小时 {m} 分后";
+        }
+        int d = (int)span.TotalDays;
+        int hh = span.Hours;
+        return hh == 0 ? $"约 {d} 天后" : $"约 {d} 天 {hh} 小时后";
+    }
+
+    private void Calc()
+    {
+        error = null;
+        nextRuns = null;
+        copied = "";
+
+        // 压缩连续空白，拆成 5 个字段
+        var s = string.Join(' ', (expr ?? "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        if (s.Length == 0)
+        {
+            error = "请输入 CRON 表达式，例如 */5 * * * *。";
+            return;
+        }
+
+        // @简写 预处理
+        if (s.StartsWith('@'))
+        {
+            var mapped = s.ToLowerInvariant() switch
+            {
+                "@hourly"   => "0 * * * *",
+                "@daily"    => "0 0 * * *",
+                "@midnight" => "0 0 * * *",
+                "@weekly"   => "0 0 * * 0",
+                "@monthly"  => "0 0 1 * *",
+                "@yearly"   => "0 0 1 1 *",
+                "@annually" => "0 0 1 1 *",
+                "@reboot"   => null,
+                _           => null,
+            };
+
+            if (s.ToLowerInvariant() == "@reboot")
+            {
+                error = "@reboot 表示重启时执行，无法预测具体时间，请改用普通表达式。";
+                return;
+            }
+
+            if (mapped is null)
+            {
+                error = $"不认识的简写 “{s}”。支持：@@hourly、@@daily、@@weekly、@@monthly、@@yearly。";
+                return;
+            }
+
+            s = mapped;
+        }
+
+        var parts = s.Split(' ');
+        if (parts.Length != 5)
+        {
+            error = $"标准 CRON 需要 5 个字段（分 时 日 月 周），当前是 {parts.Length} 个。";
+            return;
+        }
+
+        if (TryParseField(parts[0], "分", 0, 59, false, out var minutes) is var e1 && e1 is not null) { error = e1; return; }
+        if (TryParseField(parts[1], "时", 0, 23, false, out var hours) is var e2 && e2 is not null) { error = e2; return; }
+        if (TryParseField(parts[2], "日", 1, 31, false, out var days) is var e3 && e3 is not null) { error = e3; return; }
+        if (TryParseField(parts[3], "月", 1, 12, true, out var months) is var e4 && e4 is not null) { error = e4; return; }
+        if (TryParseField(parts[4], "周", 0, 7, true, out var dows) is var e5 && e5 is not null) { error = e5; return; }
+
+        var cron = new CronExpr(minutes, hours, days, months, dows,
+            DomStar: parts[2] == "*" || parts[2] == "?",
+            DowStar: parts[4] == "*" || parts[4] == "?");
+
+        // 从下一分钟开始逐分钟扫描，最多向前找 4 年
+        var t = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day,
+                             DateTime.Now.Hour, DateTime.Now.Minute, 0).AddMinutes(1);
+        baseTime = t.AddMinutes(-1);
+
+        const int MaxScan = 366 * 24 * 60 * 4;
+        var runs = new List<DateTime>(5);
+        for (int i = 0; i < MaxScan && runs.Count < 5; i++)
+        {
+            if (Matches(cron, t)) runs.Add(t);
+            t = t.AddMinutes(1);
+        }
+
+        if (runs.Count == 0)
+        {
+            error = "表达式合法，但向前扫描 4 年都找不到执行时间（检查 日/月/周 的组合是否可能命中）。";
+            return;
+        }
+
+        nextRuns = runs;
+    }
+
+    private sealed record CronExpr(int[] Minutes, int[] Hours, int[] Days, int[] Months, int[] Dows,
+                                   bool DomStar, bool DowStar);
+
+    private static bool Matches(CronExpr e, DateTime t) =>
+        Array.IndexOf(e.Minutes, t.Minute) >= 0
+        && Array.IndexOf(e.Hours, t.Hour) >= 0
+        && Array.IndexOf(e.Months, t.Month) >= 0
+        && DayMatches(e, t);
+
+    private static bool DayMatches(CronExpr e, DateTime t)
+    {
+        if (e.DomStar && e.DowStar) return true;
+        if (e.DomStar) return Array.IndexOf(e.Dows, (int)t.DayOfWeek) >= 0;
+        if (e.DowStar) return Array.IndexOf(e.Days, t.Day) >= 0;
+
+        // 日、周都限制了具体值：Vixie cron 语义取「或」
+        return Array.IndexOf(e.Days, t.Day) >= 0 || Array.IndexOf(e.Dows, (int)t.DayOfWeek) >= 0;
+    }
+
+    private static readonly string[] MonthNames =
+        { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
+
+    private static readonly string[] DowNames = { "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT" };
+
+    /// <summary>解析单个字段，出错时返回错误文案；成功时 set 为升序去重后的取值集合。</summary>
+    private static string? TryParseField(string raw, string label, int min, int max, bool useNames, out int[] set)
+    {
+        set = Array.Empty<int>();
+        var allowed = new HashSet<int>();
+
+        foreach (var term in raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string range = term;
+            int step = 1;
+
+            int slash = term.IndexOf('/');
+            if (slash >= 0)
+            {
+                range = term[..slash];
+                var stepPart = term[(slash + 1)..];
+
+                if (!int.TryParse(stepPart, out step) || step < 1 || step > max - min + 1)
+                {
+                    return $"{label}：步进 “{stepPart}” 不合法（应为 1–{max - min + 1} 的整数）。";
+                }
+            }
+
+            int lo, hi;
+
+            if (range == "*" || range == "?")
+            {
+                lo = min;
+                hi = max;
+            }
+            else if (range.Contains('-'))
+            {
+                var ab = range.Split('-');
+                if (ab.Length != 2)
+                {
+                    return $"{label}：“{range}” 不是合法的范围。";
+                }
+
+                if (!TryValue(ab[0], min, max, useNames, out lo))
+                {
+                    return $"{label}：“{ab[0]}” 超出范围或写法不对（{Describe(min, max, useNames)}）。";
+                }
+
+                if (!TryValue(ab[1], min, max, useNames, out hi))
+                {
+                    return $"{label}：“{ab[1]}” 超出范围或写法不对（{Describe(min, max, useNames)}）。";
+                }
+            }
+            else
+            {
+                if (!TryValue(range, min, max, useNames, out lo))
+                {
+                    return $"{label}：“{range}” 超出范围或写法不对（{Describe(min, max, useNames)}）。";
+                }
+
+                // 有步进的单值（如 9/2）：从 9 到最大值；无步进则就是 9 一个点
+                hi = slash >= 0 ? max : lo;
+            }
+
+            if (lo > hi)
+            {
+                return $"{label}：范围 {lo}-{hi} 起点不能大于终点（不支持回卷）。";
+            }
+
+            for (int v = lo; v <= hi; v += step)
+            {
+                // 周字段：7 也表示周日，统一归并到 0
+                if (useNames && max == 7 && v == 7)
+                {
+                    allowed.Add(0);
+                }
+                else
+                {
+                    allowed.Add(v);
+                }
+            }
+        }
+
+        if (allowed.Count == 0)
+        {
+            return $"{label}：没有解析出任何取值。";
+        }
+
+        set = allowed.OrderBy(x => x).ToArray();
+        return null;
+    }
+
+    private static bool TryValue(string s, int min, int max, bool useNames, out int v)
+    {
+        if (useNames)
+        {
+            var up = s.ToUpperInvariant();
+            if (max == 12)
+            {
+                int m = Array.IndexOf(MonthNames, up);
+                if (m >= 0) { v = m + 1; return true; }
+            }
+            else if (max == 7)
+            {
+                int d = Array.IndexOf(DowNames, up);
+                if (d >= 0) { v = d; return true; }
+            }
+        }
+
+        if (int.TryParse(s, out v) && v >= min && v <= max)
+        {
+            return true;
+        }
+
+        v = 0;
+        return false;
+    }
+
+    private static string Describe(int min, int max, bool useNames) =>
+        useNames && max == 12 ? $"1–12 或 JAN–DEC"
+        : useNames && max == 7 ? "0–7（0 和 7 都是周日）或 SUN–SAT"
+        : $"{min}–{max}";
+}
