@@ -8,7 +8,7 @@
 
 <p class="page-note">
     基于 ffmpeg.wasm 在浏览器内完成音频转码，文件全程不上传服务器；
-    转码核心已内置于本站静态资源，首次使用约需加载 24 MB。
+    转码核心已内置于本站静态资源，首次使用约需加载 32 MB。
 </p>
 
 <div class="panel form-panel">
@@ -171,7 +171,7 @@
         {
             if (!coreLoaded)
             {
-                statusText = "正在加载 FFmpeg 核心（约 24 MB，已内置于本站）…";
+                statusText = "正在加载 FFmpeg 核心（约 32 MB，已内置于本站）…";
                 errorText = null;
                 StateHasChanged();
                 coreLoaded = await module.InvokeAsync<bool>("load", dotnetRef);
