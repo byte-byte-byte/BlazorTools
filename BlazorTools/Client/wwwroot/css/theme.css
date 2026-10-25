@@ -1448,6 +1448,7 @@ hr {
     border-radius: var(--r-sm);
     background: rgba(var(--accent-rgb), .04);
     transition: border-color .18s ease, background .18s ease;
+    margin-top:.5rem;
 }
 
     .file-pick:hover, .file-pick:focus-within {

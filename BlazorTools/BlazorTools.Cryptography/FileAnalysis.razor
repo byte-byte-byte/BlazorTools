@@ -12,13 +12,28 @@
 
 <p class="page-note">
     选择本地文件，在浏览器内并行计算 CRC-32 / CRC-64 / XXH64 / XXH128 / MD5 / SHA-1 / SHA-256 / SHA-384 / SHA-512 / SHA3-256
-    十种校验值。文件分块流式读取（512 KB/块），不整块载入内存；十项任务彼此独立，任何一项失败只影响自身卡片，不会阻塞其它结果输出。
+    十种校验值，计算类型可按需勾选（默认全部勾选），仅对勾选项计算。文件分块流式读取（512 KB/块），不整块载入内存；各项任务彼此独立，任何一项失败只影响自身卡片，不会阻塞其它结果输出。
 </p>
 
 <div class="panel form-panel">
     <div class="panel-head">
         <span class="panel-title">选择文件 File</span>
         <span class="panel-sub">单次最大 2 GB · 全程本机计算</span>
+    </div>
+
+    <div class="check-row">
+        <span class="chip-row-label">计算类型 <b>@selectedAlgos.Count</b>/@Algos.Length</span>
+        @foreach (var a in Algos)
+        {
+            <label class="check-chip @(selectedAlgos.Contains(a.Id) ? "is-on" : null)" title="@a.Hint">
+                <input type="checkbox" checked="@IsChecked(a.Id)" disabled="@busy" @onchange="e => ToggleAlgo(a.Id, e.Value is true)" />
+                <span class="tick" aria-hidden="true">✓</span>
+                <span>@a.Name</span>
+            </label>
+        }
+        <button type="button" class="chip-btn" disabled="@busy" @onclick="() => SelectAll(selectedAlgos.Count < Algos.Length)">
+            @(selectedAlgos.Count < Algos.Length ? "全选" : "全不选")
+        </button>
     </div>
 
     <div class="file-pick">
@@ -42,7 +57,7 @@
         <div class="stat-strip">
             <span class="stat-chip">文件 <b>@fileName</b></span>
             <span class="stat-chip">大小 <b>@FmtSize(fileSize)</b></span>
-            <span class="stat-chip">进度 <b>@DoneCount()/@Algos.Length</b></span>
+            <span class="stat-chip">进度 <b>@DoneCount()/@rows.Count</b></span>
             @if (totalMs > 0)
             {
                 <span class="stat-chip">总耗时 <b>@totalMs ms</b></span>
@@ -56,7 +71,7 @@
     <div class="panel">
         <div class="panel-head">
             <span class="panel-title">校验结果 Hashes</span>
-            <span class="panel-sub">十项并行 · 独立容错</span>
+            <span class="panel-sub">@(rows.Count) 项并行 · 独立容错</span>
         </div>
 
         <div class="hash-grid">
@@ -130,6 +145,22 @@
     private bool busy;
     private string copied = "";
 
+    /// <summary>勾选的计算类型集合，默认全选。</summary>
+    private HashSet<string> selectedAlgos = Algos.Select(a => a.Id).ToHashSet();
+
+    private bool IsChecked(string id) => selectedAlgos.Contains(id);
+
+    private void ToggleAlgo(string id, bool on)
+    {
+        if (on) selectedAlgos.Add(id);
+        else selectedAlgos.Remove(id);
+    }
+
+    private void SelectAll(bool all)
+    {
+        selectedAlgos = all ? Algos.Select(a => a.Id).ToHashSet() : new HashSet<string>();
+    }
+
     private string Mark(string key) => copied == key ? "✓" : "⧉";
 
     private int DoneCount() => rows.Count(r => r.Status is "done" or "error");
@@ -199,12 +230,19 @@
             return;
         }
 
+        var picked = Algos.Where(a => selectedAlgos.Contains(a.Id)).ToArray();
+        if (picked.Length == 0)
+        {
+            fileError = "请至少勾选一种计算类型。";
+            return;
+        }
+
         fileError = null;
         fileName = f.Name;
         fileSize = f.Size;
         totalMs = 0;
         copied = "";
-        rows = Algos.Select(a => new AlgoRow(a.Id, a.Name, a.Lib, a.Hint)).ToList();
+        rows = picked.Select(a => new AlgoRow(a.Id, a.Name, a.Lib, a.Hint)).ToList();
         busy = true;
 
         var sw = Stopwatch.StartNew();
